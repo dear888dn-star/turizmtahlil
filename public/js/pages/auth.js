@@ -1,0 +1,180 @@
+import { h, mount, toast } from "../ui.js";
+import { api, session } from "../api.js";
+
+function afterLogin() {
+  const next = sessionStorage.getItem("tt.after-login");
+  sessionStorage.removeItem("tt.after-login");
+  location.hash = next || (session.isTeacher ? "#/teacher" : "#/");
+}
+
+function field(label, attrs) {
+  return h("label", { class: "field" }, h("span", {}, label), h("input", attrs));
+}
+
+export function renderLogin(el) {
+  if (session.user) return afterLogin();
+  const err = h("div");
+  const form = h(
+    "form",
+    { class: "card auth-card", onsubmit: async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const btn = form.querySelector("button");
+      btn.disabled = true;
+      err.replaceChildren();
+      try {
+        const res = await api.post("auth/login", { email: fd.get("email"), password: fd.get("password") });
+        session.set(res.token, res.user);
+        toast("Xush kelibsiz!", "ok");
+        afterLogin();
+      } catch (ex) {
+        err.replaceChildren(h("div", { class: "alert alert-error" }, ex.message));
+      } finally {
+        btn.disabled = false;
+      }
+    } },
+    h("h1", {}, "Tizimga kirish"),
+    h("p", { class: "muted" }, "Email va parolingizni kiriting."),
+    field("Email", { name: "email", type: "email", required: true, autocomplete: "email" }),
+    field("Parol", { name: "password", type: "password", required: true, autocomplete: "current-password" }),
+    h("p", { class: "small", style: { margin: "-6px 0 0", textAlign: "right" } }, h("a", { href: "#/forgot" }, "Parolni unutdingizmi?")),
+    err,
+    h("button", { class: "btn block lg", type: "submit" }, "Kirish"),
+    h("p", { class: "center muted" }, "Profilingiz yo'qmi? ", h("a", { href: "#/register" }, "Ro'yxatdan o'ting"))
+  );
+  mount(el, h("div", { class: "auth-wrap" }, form));
+}
+
+export function renderForgot(el) {
+  const err = h("div");
+  const form = h(
+    "form",
+    { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      err.replaceChildren();
+      if (fd.get("newPassword") !== fd.get("newPassword2")) return err.replaceChildren(h("div", { class: "alert alert-error" }, "Parollar mos kelmadi"));
+      const btn = form.querySelector("button[type=submit]");
+      const send = async (as) => {
+        btn.disabled = true;
+        try {
+          const res = await api.post("auth/reset", { email: fd.get("email"), teacherCode: fd.get("teacherCode"), newPassword: fd.get("newPassword"), as });
+          session.set(res.token, res.user);
+          toast(as === "teacher" ? "Profil o'qituvchi profiliga aylantirildi, parol yangilandi!" : "Parol yangilandi. Xush kelibsiz!", "ok");
+          afterLogin();
+        } catch (ex) {
+          err.replaceChildren(
+            ex.data?.needsChoice
+              ? h("div", { class: "alert alert-warn stack" },
+                  h("div", {}, h("b", {}, `${ex.data.name || fd.get("email")}: `), ex.message),
+                  h("div", { class: "row wrap" },
+                    h("button", { type: "button", class: "btn", onclick: () => send("teacher") }, "👩‍🏫 O'qituvchi profiliga aylantirish"),
+                    h("button", { type: "button", class: "btn ghost", onclick: () => send("student") }, "🎓 Faqat parolni yangilash")))
+              : h("div", { class: "alert alert-error" }, ex.message)
+          );
+        } finally {
+          btn.disabled = false;
+        }
+      };
+      await send();
+    } },
+    field("Email", { name: "email", type: "email", required: true, autocomplete: "email" }),
+    field("O'qituvchi kodi", { name: "teacherCode", type: "password", required: true, autocomplete: "off" }),
+    h("p", { class: "muted small" }, "Ro'yxatdan o'tishda kiritilgan kod. U Netlify sozlamalarida saqlanadi: Site configuration → Environment variables → TEACHER_CODE."),
+    h("div", { class: "grid cols-2" }, field("Yangi parol", { name: "newPassword", type: "password", required: true, minlength: 6, autocomplete: "new-password" }), field("Yangi parolni takrorlang", { name: "newPassword2", type: "password", required: true, minlength: 6, autocomplete: "new-password" })),
+    err,
+    h("button", { class: "btn block lg", type: "submit" }, "Parolni yangilash va kirish")
+  );
+  mount(
+    el,
+    h("div", { class: "auth-wrap" },
+      h("div", { class: "card auth-card" },
+        h("h1", {}, "Parolni tiklash"),
+        h("div", { class: "alert alert-info" }, h("b", {}, "🎓 Talabamisiz? "), "O'qituvchingizga murojaat qiling — u panelning “Talabalar” bo'limida 🔑 tugmasi orqali sizga vaqtinchalik parol beradi. Kirgach, uni Profil sahifasida o'zgartiring."),
+        h("h3", {}, "👩‍🏫 O'qituvchi uchun"),
+        form,
+        h("p", { class: "center muted" }, h("a", { href: "#/login" }, "← Kirish sahifasiga qaytish"))))
+  );
+}
+
+/** Tajriba (TG) yoki nazorat (NG) guruhini tanlash kartalari. */
+export function cohortPicker(name = "cohort") {
+  const options = [
+    ["experimental", "🧪", "Tajriba guruhi (TG)", "Platforma, AI tekshiruv va trenajyor asosida o'qiyman."],
+    ["control", "📘", "Nazorat guruhi (NG)", "An'anaviy usulda o'qiyman."],
+  ];
+  const wrap = h(
+    "fieldset",
+    { class: "cohort-pick" },
+    h("legend", {}, "Siz qaysi guruhdasiz?"),
+    h("div", { class: "choice-cards" },
+      options.map(([value, icon, title, text]) =>
+        h("label", { class: "choice-card" },
+          h("input", { type: "radio", name, value, onchange: () => wrap.querySelectorAll(".choice-card").forEach((c) => c.classList.toggle("active", c.querySelector("input").checked)) }),
+          h("span", { class: "choice-icon" }, icon),
+          h("b", {}, title),
+          h("small", { class: "muted" }, text)))),
+    h("p", { class: "muted small" }, "Guruhingizni o'qituvchingizdan aniqlang. Keyinchalik uni faqat o'qituvchi o'zgartira oladi.")
+  );
+  return wrap;
+}
+
+export async function renderRegister(el) {
+  if (session.user) return afterLogin();
+  let config = { teacherSignup: false };
+  try {
+    config = await api.get("config");
+  } catch {}
+  const err = h("div");
+  const teacherFields = h("div", { class: "hidden" }, field("O'qituvchi kodi", { name: "teacherCode", type: "password", autocomplete: "off" }), h("p", { class: "muted small" }, "Kodni platforma administratoridan oling."));
+  const studentFields = h("div", {}, field("Guruh", { name: "group", placeholder: "Masalan: TUR-401", maxlength: 60 }));
+  const form = h(
+    "form",
+    { class: "card auth-card", onsubmit: async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      if (fd.get("password") !== fd.get("password2")) {
+        err.replaceChildren(h("div", { class: "alert alert-error" }, "Parollar mos kelmadi"));
+        return;
+      }
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      err.replaceChildren();
+      try {
+        const res = await api.post("auth/register", Object.fromEntries(fd));
+        session.set(res.token, res.user);
+        toast("Profil yaratildi!", "ok");
+        afterLogin();
+      } catch (ex) {
+        err.replaceChildren(h("div", { class: "alert alert-error" }, ex.message));
+      } finally {
+        btn.disabled = false;
+      }
+    } },
+    h("h1", {}, "Ro'yxatdan o'tish"),
+    config.teacherSignup &&
+      h(
+        "div",
+        { class: "segmented role-switch" },
+        ["student", "teacher"].map((r, i) =>
+          h("label", { class: `seg ${i === 0 ? "active" : ""}` }, h("input", { type: "radio", name: "role", value: r, checked: i === 0, onchange: (e) => {
+            form.querySelectorAll(".role-switch .seg").forEach((s) => s.classList.toggle("active", s.contains(e.target)));
+            teacherFields.classList.toggle("hidden", r !== "teacher");
+            studentFields.classList.toggle("hidden", r === "teacher");
+          } }), r === "student" ? "🎓 Talaba" : "👩‍🏫 O'qituvchi")
+        )
+      ),
+    field("Ism-familiya", { name: "name", required: true, maxlength: 120, autocomplete: "name" }),
+    field("Email", { name: "email", type: "email", required: true, autocomplete: "email" }),
+    field("Ta'lim muassasasi", { name: "college", placeholder: "Masalan: O'zMU Jizzax filiali", maxlength: 160, list: "college-list", autocomplete: "off" }),
+    h("datalist", { id: "college-list" }, (config.colleges || []).map((c) => h("option", { value: c }))),
+    studentFields,
+    teacherFields,
+    h("div", { class: "grid cols-2" }, field("Parol", { name: "password", type: "password", required: true, minlength: 6, autocomplete: "new-password" }), field("Parolni takrorlang", { name: "password2", type: "password", required: true, minlength: 6, autocomplete: "new-password" })),
+    h("p", { class: "muted small" }, "Ro'yxatdan o'tish orqali o'quv natijalaringiz (test, amaliy mashg'ulot, AI tekshiruvlari) o'qituvchingizga ko'rinishiga rozilik bildirasiz. Javoblaringiz AI tekshiruvi uchun sun'iy intellekt xizmatiga yuboriladi."),
+    err,
+    h("button", { class: "btn block lg", type: "submit" }, "Profil yaratish"),
+    h("p", { class: "center muted" }, "Profilingiz bormi? ", h("a", { href: "#/login" }, "Kirish"))
+  );
+  mount(el, h("div", { class: "auth-wrap" }, form));
+}

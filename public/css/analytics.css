@@ -1,0 +1,119 @@
+/* TurTahlil: amaliy mashg'ulotlar, AI tekshiruv, tahlil laboratoriyasi va dolzarb ma'lumotlar. */
+
+.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.chip-active { background: var(--primary); color: var(--primary-ink); }
+button.chip.chip-active { background: var(--primary); color: var(--primary-ink); }
+.span-2 { grid-column: 1 / -1; }
+.grow { flex: 1; min-width: 220px; }
+
+/* ---- Dolzarb ma'lumotlar ---- */
+mark.outdated { background: #fde68a; color: inherit; padding: 0 2px; border-radius: 3px; box-shadow: inset 0 -2px 0 #f59e0b; }
+:root[data-theme="dark"] mark.outdated { background: #5b4a12; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) mark.outdated { background: #5b4a12; } }
+.update-inline { margin: -4px 0 14px; padding: 10px 14px; border-left: 4px solid var(--ok); background: var(--ok-soft); border-radius: 0 10px 10px 0; font-size: 0.92rem; line-height: 1.5; }
+.update-card { display: grid; gap: 8px; border-left: 4px solid var(--accent); }
+.update-old { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(192, 57, 43, 0.5); }
+.update-new { line-height: 1.55; }
+.update-src a { word-break: break-word; }
+.lesson-book-title { opacity: 0.85; margin-top: 6px; }
+
+/* ---- Amaliy mashg'ulot ---- */
+.practice-summary { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: var(--radius); background: var(--primary-soft); }
+.ps-ring { --p: 0; width: 66px; height: 66px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; background: radial-gradient(closest-side, var(--surface) 74%, transparent 76% 100%), conic-gradient(var(--primary) calc(var(--p) * 1%), var(--surface-2) 0); }
+.ps-ring b { font-size: 1rem; }
+.practice-task { display: grid; gap: 10px; border-left: 4px solid var(--border); transition: border-color 0.3s; }
+.practice-task.ok { border-left-color: var(--ok); }
+.practice-task h4 { margin: 0; }
+.formula { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 0.88rem; background: var(--surface-2); border-radius: 8px; padding: 8px 12px; overflow-x: auto; }
+.field-grid { display: grid; gap: 8px; }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.field-label { font-weight: 500; }
+.field-input { display: inline-flex; align-items: center; gap: 6px; }
+.num-input { width: 130px; text-align: right; font-variant-numeric: tabular-nums; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.num-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.unit { color: var(--muted); font-size: 0.85rem; min-width: 64px; }
+.field-mark { width: 18px; font-weight: 700; }
+.field-mark.ok { color: var(--ok); }
+.field-mark.bad { color: var(--err); }
+.solution summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+.solution.locked summary { color: var(--muted); }
+.solution.locked summary::after { content: " (avval javobni tekshiring)"; font-weight: 400; font-size: 0.85rem; }
+.solution.locked[open] > :not(summary) { display: none; }
+.practice-open textarea, .practice textarea { width: 100%; }
+.practice-sub { margin: 18px 0 0; }
+.ai-card { border: 1px solid var(--primary); background: linear-gradient(135deg, var(--primary-soft), var(--surface) 70%); }
+.ai-btn { white-space: nowrap; }
+.ai-thinking { display: flex; align-items: center; gap: 14px; }
+.ai-review { display: grid; gap: 14px; border-top: 4px solid var(--primary); }
+.ai-review-head { align-items: center; gap: 18px; }
+.ai-review-head h3 { margin: 0 0 4px; }
+.crit-bars { display: grid; gap: 8px; }
+.crit-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(80px, 2fr) 54px; gap: 10px; align-items: center; font-size: 0.9rem; }
+.crit-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.crit-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--c1), var(--c2)); transition: width 0.8s ease; }
+.ai-lists { gap: 12px; }
+.ai-list { border-radius: 12px; padding: 12px 14px; background: var(--surface-2); }
+.ai-list h4 { margin: 0 0 6px; }
+.ai-list ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.92rem; }
+.ai-list.ok { background: var(--ok-soft); }
+.ai-list.bad { background: var(--err-soft); }
+.ai-list.info { background: var(--info-soft); }
+.ai-tasks ul { display: grid; gap: 6px; }
+.stat-card .stat-value { font-size: 1.6rem; }
+
+/* ---- Tahlil laboratoriyasi ---- */
+.case-btn { display: grid; gap: 4px; text-align: left; justify-items: start; white-space: normal; }
+.case-btn small { font-weight: 400; line-height: 1.4; }
+.lab-table-wrap { overflow-x: auto; }
+.lab-table td:first-child { min-width: 240px; }
+.lab-table .num-input { width: 120px; }
+.lab-table .group-row td { background: var(--surface-2); font-weight: 700; }
+.lab-check { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.year-input { width: 80px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.kpi-tile { display: grid; gap: 4px; padding: 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); border-top: 4px solid var(--border); }
+.kpi-tile.ok { border-top-color: var(--ok); }
+.kpi-tile.warn { border-top-color: var(--warn); }
+.kpi-tile.bad { border-top-color: var(--err); }
+.kpi-label { font-size: 0.85rem; color: var(--muted); }
+.kpi-value { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.kpi-norm { font-size: 0.78rem; color: var(--muted); }
+.kpi-tile.ok .kpi-value { color: var(--ok); }
+.kpi-tile.warn .kpi-value { color: var(--warn); }
+.kpi-tile.bad .kpi-value { color: var(--err); }
+.total-row td { font-weight: 700; border-top: 2px solid var(--border); }
+.dupont { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 1.3rem; color: var(--muted); }
+.dp-box { display: grid; justify-items: center; padding: 10px 16px; border-radius: 12px; background: var(--surface-2); color: var(--text); min-width: 96px; }
+.dp-box small { font-size: 0.75rem; color: var(--muted); }
+.dp-box b { font-size: 1.15rem; }
+.dp-box.main { background: var(--primary); color: var(--primary-ink); }
+.dp-box.main small { color: inherit; opacity: 0.85; }
+.mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.mini { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: 0.9rem; }
+.mini b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+.grade-card { border-left: 4px solid var(--ok); }
+.table.facts td:last-child { text-align: right; }
+
+/* Kitobdagi jadval va formulalar */
+pre.book-pre { white-space: pre; overflow-x: auto; font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 0.8rem; line-height: 1.35; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.book-text p.caption { margin-top: 18px; text-align: center; }
+.book-text p.source { font-size: 0.85rem; color: var(--muted); font-style: italic; }
+.book-text h4 { margin: 18px 0 8px; color: var(--primary); }
+
+@media (max-width: 900px) {
+  .cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .crit-row { grid-template-columns: 1fr 60px; }
+  .crit-row .crit-bar { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 560px) {
+  .cols-4 { grid-template-columns: 1fr; }
+  .field-row { grid-template-columns: 1fr; gap: 4px; }
+  .num-input { width: 110px; }
+}
+@media print {
+  .topbar, .footer, .lesson-rail, .notes-wrap, .tutor-fab, .ai-btn, .no-print, button { display: none !important; }
+  .chapter { break-inside: avoid; }
+}
