@@ -29,3 +29,19 @@
   [headers.values]
     Content-Type = "text/javascript; charset=utf-8"
     Cache-Control = "public, max-age=604800"
+
+# Kredit tejash: o'zgarmaydigan fayllar brauzerda uzoq saqlanadi (qayta so'rov va trafik bo'lmaydi)
+[[headers]]
+  for = "/slides/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"

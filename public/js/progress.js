@@ -60,7 +60,7 @@ export async function loadGame({ fresh = false } = {}) {
 
 const localXp = () => {
   const g = computeGame({ progress: state });
-  return g.bySource.topics + g.bySource.review + g.bySource.streak + g.bySource.geo;
+  return g.bySource.topics + g.bySource.review + g.bySource.streak;
 };
 const otherXp = () => (evidenceCache ? computeGame({ ...evidenceCache, progress: {} }).xp - computeGame({ progress: {} }).xp : 0);
 
@@ -84,23 +84,52 @@ function trackXp(fn) {
   }
 }
 
-function persist() {
+// Serverga saqlash kamroq bo'lsin (har bir so'rov — Netlify funksiyasi chaqiruvi, ya'ni kredit):
+// o'zgarishlar 15 soniya yig'iladi, sahifa yopilganda yoki boshqa oynaga o'tilganda darhol yuboriladi.
+const SAVE_DELAY = 15_000;
+let dirty = false;
+
+async function flush() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    if (session.user) {
-      try {
-        if (!navigator.onLine) return;
-        await api.put("progress", state);
-      } catch (e) {
-        console.warn("Progress saqlanmadi:", e);
-      }
-    } else {
-      try {
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
-      } catch {}
+  if (!dirty || !state) return;
+  dirty = false;
+  if (session.user) {
+    if (!navigator.onLine) return void (dirty = true);
+    try {
+      await api.put("progress", state);
+    } catch (e) {
+      dirty = true;
+      console.warn("Progress saqlanmadi:", e);
     }
-  }, 600);
+  } else {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
+    } catch {}
+  }
 }
+
+function persist() {
+  dirty = true;
+  if (!session.user) return void flush(); // mehmon: faqat brauzerda, server chaqirilmaydi
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, SAVE_DELAY);
+}
+
+// Sahifa yopilayotganda yoki fonga o'tganda: keepalive bilan bitta so'rov
+function flushOnLeave() {
+  if (!dirty || !state || !session.user || !session.token) return;
+  dirty = false;
+  clearTimeout(saveTimer);
+  try {
+    fetch("/api/progress", { method: "PUT", keepalive: true, headers: { "content-type": "application/json", authorization: `Bearer ${session.token}` }, body: JSON.stringify(state) }).catch(() => (dirty = true));
+  } catch {
+    dirty = true;
+  }
+}
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flushOnLeave());
+window.addEventListener("pagehide", flushOnLeave);
+window.addEventListener("hashchange", () => dirty && flush());
+export const saveNow = flush;
 
 export function topicState(topicId) {
   state.topics[topicId] ||= { read: false, quiz: null, methods: {}, flashcards: false };
@@ -123,7 +152,7 @@ export function updateSrs(fn) {
 export const progressState = () => state;
 
 // Internet qaytganda oflayn paytdagi o'zgarishlarni serverga yuboramiz.
-window.addEventListener("online", () => state && session.user && persist());
+window.addEventListener("online", () => state && session.user && dirty && flush());
 
 export function updatePlan(fn) {
   fn(state.plan);
