@@ -1,0 +1,21 @@
+// Cloudflare Worker sozlamalari. "npx wrangler deploy" birinchi marta ishlaganda D1 baza va R2 bucket
+// avtomatik yaratiladi (ID yozish shart emas). Maxfiy kalitlar (JWT_SECRET, TEACHER_CODE, GEMINI_API_KEY)
+// Cloudflare panelida: Worker → Settings → Variables and Secrets (turi: Secret).
+// R2 (FILES) ixtiyoriy: o'qituvchi yuklaydigan qo'shimcha fayllar va AI ovozi uchun. Kerak bo'lsa qo'shing:
+//   "r2_buckets": [{ "binding": "FILES", "bucket_name": "turtahlil-files" }]
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "turizmtahlil",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "build": { "command": "npm install --no-audit --no-fund" },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [{ "binding": "DB", "database_name": "turtahlil-db" }],
+  "keep_vars": true,
+  "observability": { "enabled": true }
+}

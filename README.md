@@ -34,7 +34,7 @@ So'rovnomalar funksiyasi bu platformada **yo'q**.
 
 - Frontend oddiy HTML/CSS/JavaScript (ES modullar), yig'ish bosqichi yo'q (`public/`).
 - Server kodi umumiy: `server/` (`app.mjs` — API, `store.mjs` — ombor interfeysi).
-- **Asosiy joylashtirish — Cloudflare Pages.** Ulagich: `functions/api/[[path]].js`; ma'lumotlar D1 bazasida, fayllar R2'da (`server/store-d1.mjs`). Yo'riqnoma: **[CLOUDFLARE.md](CLOUDFLARE.md)**.
+- **Asosiy joylashtirish — Cloudflare Worker.** Sozlamalar: `wrangler.jsonc`; kirish nuqtasi: `worker/index.js`; ma'lumotlar D1 bazasida, fayllar R2'da (`server/store-d1.mjs`). Yo'riqnoma: **[CLOUDFLARE.md](CLOUDFLARE.md)**.
 - **Zaxira — Netlify.** Ulagich: `netlify/functions/api.mjs`; ma'lumotlar Netlify Blobs'da (`server/store-netlify.mjs`); sozlamalar: `netlify.toml`.
 - AI: Google Gemini (bepul kalit) yoki Claude API. Kalit bo'lmasa, AI tekshiruvi taxminiy baho beradi, trenajyor esa demo-rejimda ishlaydi.
 

@@ -1,76 +1,57 @@
-# TurTahlil'ni Cloudflare Pages'ga joylash
+# TurTahlil'ni Cloudflare'ga joylash
 
-Platformaning asosiy versiyasi Cloudflare Pages'da ishlaydi:
+Platforma **Cloudflare Worker** sifatida ishlaydi (`wrangler.jsonc`, `worker/index.js`):
 
-- **Sahifalar, taqdimotlar va rasmlar** statik fayllar sifatida beriladi. Bepul tarifda ular uchun so'rovlar va trafik cheklanmagan.
-- **Server qismi (`/api/*`)** `functions/api/[[path]].js` faylida. Bepul tarifda kuniga 100 000 ta so'rov beriladi.
-- **Ma'lumotlar** (akkauntlar, progress, AI tekshiruvlari, laboratoriya, baholar) **D1** bazasida saqlanadi. Bazadagi jadval birinchi so'rovda avtomatik yaratiladi.
-- **Fayllar** (o'qituvchi yuklagan taqdimot va videolar, AI ovozlari) **R2** fayl omborida saqlanadi.
+- **Sahifalar, taqdimotlar va rasmlar** — `public/` dagi statik fayllar. Ular uchun so'rovlar bepul va cheklanmagan.
+- **Server qismi (`/api/*`)** — bepul tarifda kuniga 100 000 ta so'rov.
+- **Ma'lumotlar** — **D1** bazasi (`turtahlil-db`). U birinchi deploy'da avtomatik yaratiladi, jadval esa birinchi so'rovda yaratiladi.
+- **Fayllar** — **R2** (ixtiyoriy, quyida qarang).
 
-GitHub'ga har bir push Cloudflare'da avtomatik deploy qiladi. Bepul tarifda oyiga 500 ta deploy beriladi va hech qanday kredit yechilmaydi.
+GitHub'ning `main` tarmog'iga har bir push Cloudflare'da avtomatik deploy qiladi. Kredit yechilmaydi.
 
-## 1. Loyihani yaratish
+## 1. Loyihani ulash (bir marta)
 
-1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
-2. GitHub'dan `turizmtahlil` repozitoriysini tanlang.
-3. Sozlamalar:
-   - **Production branch:** `main`
-   - **Framework preset:** `None`
-   - **Build command:** `npm install`
-   - **Build output directory:** `public`
-   - **Root directory:** bo'sh qoldiring
-4. **Save and Deploy** tugmasini bosing. Birinchi deploy tugaganda sahifalar ochiladi, lekin kirish va ro'yxatdan o'tish hali ishlamaydi. Ular keyingi qadamlardan so'ng ishlaydi.
+Cloudflare → **Workers & Pages** → **Create** → **Import a repository** → `turizmtahlil`.
 
-## 2. D1 ma'lumotlar bazasi (majburiy)
+- **Build command:** bo'sh qoldiring
+- **Deploy command:** `npx wrangler deploy`
 
-1. **Workers & Pages** → **D1 SQL Database** → **Create**. Nomi: `turtahlil-db`.
-2. SQL kod kiritish shart emas: jadval avtomatik yaratiladi.
+Qolgan sozlamalar (`nodejs_compat`, D1 baza, statik fayllar) `wrangler.jsonc` dan avtomatik olinadi.
 
-## 3. R2 fayl ombori (tavsiya etiladi)
+## 2. Maxfiy kalitlar
 
-1. Chap menyu → **R2 Object Storage** → **Create bucket**. Nomi: `turtahlil-files`.
-2. R2 faqat quyidagilar uchun kerak:
-   - o'qituvchi yuklaydigan qo'shimcha taqdimot va videolar;
-   - AI ovozlari.
-
-   18 ta dars taqdimoti platformaga allaqachon o'rnatilgan, ular R2'siz ham ishlaydi.
-
-## 4. Bog'lanishlar (Bindings)
-
-Pages loyihangiz → **Settings** → **Bindings** → **Add**:
-
-| Turi | Variable name | Tanlang |
-|---|---|---|
-| D1 database | `DB` | `turtahlil-db` |
-| R2 bucket | `FILES` | `turtahlil-files` |
-
-Nomlar aynan shunday, katta harflar bilan yozilishi kerak.
-
-## 5. Node.js moslik bayrog'i (majburiy)
-
-**Settings** → **Runtime** bo'limida:
-
-- **Compatibility flags:** `nodejs_compat` qo'shing (Production va Preview uchun).
-- **Compatibility date:** `2026-09-01` yoki undan keyingi sana.
-
-## 6. Maxfiy kalitlar
-
-**Settings** → **Variables and Secrets** → **Add**. Har birining turi: **Secret**.
+Worker → **Settings** → **Variables and Secrets** → **Add**. Har birining turi: **Secret**.
 
 | Nomi | Majburiy | Qiymati |
 |---|---|---|
 | `JWT_SECRET` | ✅ | Uzun tasodifiy satr (40+ belgi) |
 | `TEACHER_CODE` | ✅ | O'qituvchi ro'yxatdan o'tishi uchun maxfiy kod |
 | `GEMINI_API_KEY` | tavsiya | [aistudio.google.com](https://aistudio.google.com) → Get API key (bepul). AI tekshiruv, trenajyor, AI Ustoz va AI ovozni yoqadi |
-| `ANTHROPIC_API_KEY` | yo'q | Claude kaliti (pullik). O'rnatilsa, Gemini o'rniga ishlatiladi |
+| `ANTHROPIC_API_KEY` | yo'q | Claude kaliti (pullik) |
 
-## 7. Qayta deploy
+Kalitlarni qo'shgandan keyin **Deployments** → oxirgi deploy → **Retry**. Kalitlar keyingi deploy'larda ham saqlanib qoladi (`keep_vars`).
 
-**Deployments** → oxirgi deploy → **Retry deployment**. Bog'lanishlar va kalitlar faqat yangi deploy'dan keyin kuchga kiradi.
-
-Tekshirish uchun `https://<loyiha-nomi>.pages.dev/api/health` manzilini oching. U yerda `"platform":"Cloudflare Pages"` yozuvi va `"blobs":"ishlayapti"` (ombor ishlayapti) ko'rinishi kerak.
+Tekshirish uchun `https://<worker-nomi>.<akkaunt>.workers.dev/api/health` manzilini oching. U yerda `"platform":"Cloudflare"` ko'rinishi kerak.
 
 So'ng saytda **Ro'yxatdan o'tish → O'qituvchi** ni tanlab, `TEACHER_CODE` bilan profil yarating.
+
+## 3. R2 fayl ombori (ixtiyoriy)
+
+R2 faqat quyidagilar uchun kerak:
+- o'qituvchi yuklaydigan qo'shimcha taqdimot va videolar;
+- AI ovozlari.
+
+18 ta dars taqdimoti platformaga o'rnatilgan, ular R2'siz ham ishlaydi.
+
+Yoqish uchun:
+1. Cloudflare'da R2 faollashtirilgan bo'lishi kerak (**R2 Object Storage** bo'limi).
+2. `wrangler.jsonc` ga quyidagi qatorni qo'shing:
+
+   ```
+   "r2_buckets": [{ "binding": "FILES", "bucket_name": "turtahlil-files" }],
+   ```
+
+   Bucket keyingi deploy'da avtomatik yaratiladi.
 
 ## Bepul tarif chegaralari va platformaning moslashuvi
 
@@ -81,7 +62,7 @@ So'ng saytda **Ro'yxatdan o'tish → O'qituvchi** ni tanlab, `TEACHER_CODE` bila
   - reyting va o'qituvchi paneli barcha ma'lumotni bir necha umumiy so'rov bilan oladi.
 
   Agar baribir "Exceeded CPU limit" xatosi chiqsa, `server/auth.mjs` faylidagi `PBKDF2_ITER` qiymatini kamaytiring.
-- **D1: 5 GB, R2: 10 GB.**
+- **D1: 5 GB, R2: 10 GB** (bepul).
 
 ## Netlify (zaxira versiya)
 
@@ -98,8 +79,8 @@ Netlify kreditlari tejalishi uchun Netlify'dagi saytda **Stop builds** ni yoqing
 
 ```bash
 npm install
-npx wrangler pages dev public --d1 DB=turtahlil-db --r2 FILES=turtahlil-files \
-  --compatibility-date 2026-09-01 --compatibility-flags nodejs_compat \
-  --binding TEACHER_CODE=ustoz-local --binding JWT_SECRET=local-secret-1234567890
+npx wrangler dev --port 8788 --var TEACHER_CODE:ustoz-local --var JWT_SECRET:local-secret-1234567890
 # http://localhost:8788
 ```
+
+Agar loyiha Cloudflare **Pages** sifatida yaratilgan bo'lsa, `functions/api/[[path]].js` ulagichi ishlaydi. Bu holda bog'lanishlarni (D1 — `DB`, R2 — `FILES`) va `nodejs_compat` bayrog'ini panelda qo'lda qo'shish kerak.
