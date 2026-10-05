@@ -5,7 +5,7 @@ Platforma **Cloudflare Worker** sifatida ishlaydi (`wrangler.jsonc`, `worker/ind
 - **Sahifalar, taqdimotlar va rasmlar** — `public/` dagi statik fayllar. Ular uchun so'rovlar bepul va cheklanmagan.
 - **Server qismi (`/api/*`)** — bepul tarifda kuniga 100 000 ta so'rov.
 - **Ma'lumotlar** — **D1** bazasi (`turtahlil-db`). U birinchi deploy'da avtomatik yaratiladi, jadval esa birinchi so'rovda yaratiladi.
-- **Fayllar** — **R2** (ixtiyoriy, quyida qarang).
+- **Fayllar** (AI ovozlari, o'qituvchi yuklagan fayllar) — R2 ulangan bo'lsa R2'da, aks holda shu D1 bazasida saqlanadi.
 
 GitHub'ning `main` tarmog'iga har bir push Cloudflare'da avtomatik deploy qiladi. Kredit yechilmaydi.
 
@@ -37,9 +37,7 @@ So'ng saytda **Ro'yxatdan o'tish → O'qituvchi** ni tanlab, `TEACHER_CODE` bila
 
 ## 3. R2 fayl ombori (ixtiyoriy)
 
-R2 faqat quyidagilar uchun kerak:
-- o'qituvchi yuklaydigan qo'shimcha taqdimot va videolar;
-- AI ovozlari.
+R2 shart emas: AI ovozlari va o'qituvchi yuklagan fayllar R2 bo'lmasa D1 bazasida saqlanadi (5 GB gacha bepul). R2 faqat ko'p hajmli videolar yuklanadigan bo'lsa kerak bo'ladi.
 
 18 ta dars taqdimoti platformaga o'rnatilgan, ular R2'siz ham ishlaydi.
 

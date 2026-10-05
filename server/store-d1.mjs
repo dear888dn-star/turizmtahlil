@@ -1,21 +1,24 @@
 // Cloudflare uchun ma'lumotlar ombori: JSON yozuvlar — D1 (SQLite) bazasidagi kalit-qiymat jadvalida,
-// ikkilik fayllar (taqdimot va video bo'laklari, AI ovozlari) — R2 bucket'da.
-// Jadval birinchi so'rovda avtomatik yaratiladi (qo'lda SQL ishga tushirish shart emas).
+// ikkilik fayllar (taqdimot va video bo'laklari, AI ovozlari) — R2 bucket'da, R2 ulanmagan bo'lsa —
+// D1'ning "bin" jadvalida (base64 bo'laklar, har bir qator D1 chegarasidan — 2 MB — kichik).
+// Jadvallar birinchi so'rovda avtomatik yaratiladi (qo'lda SQL ishga tushirish shart emas).
 
-const SCHEMA = "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER NOT NULL)";
+import { Buffer } from "node:buffer";
+
+const SCHEMA = [
+  "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS bin (key TEXT NOT NULL, part INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (key, part))",
+];
+const PART = 1_200_000; // base64 belgi (~900 KB ikkilik ma'lumot)
 // Prefiks bo'yicha qidiruv: key >= prefix AND key < prefix + U+FFFF (LIKE dan tezroq, indeksdan foydalanadi)
 const upper = (prefix) => `${prefix}￿`;
 
 export function d1Store(DB, FILES) {
   let ready = null;
-  const init = () => (ready ||= DB.prepare(SCHEMA).run().catch((e) => {
+  const init = () => (ready ||= DB.batch(SCHEMA.map((q) => DB.prepare(q))).catch((e) => {
     ready = null;
     throw e;
   }));
-  const needFiles = () => {
-    if (!FILES) throw Object.assign(new Error("Fayl ombori (R2) ulanmagan: Cloudflare Pages → Settings → Bindings bo'limida FILES nomli R2 bucket qo'shing"), { status: 503 });
-    return FILES;
-  };
   return {
     async get(key) {
       await init();
@@ -30,21 +33,35 @@ export function d1Store(DB, FILES) {
     },
     async del(key) {
       await init();
-      await DB.prepare("DELETE FROM kv WHERE key = ?").bind(key).run();
+      await DB.batch([DB.prepare("DELETE FROM kv WHERE key = ?").bind(key), DB.prepare("DELETE FROM bin WHERE key = ?").bind(key)]);
       if (FILES) await FILES.delete(key).catch(() => {});
     },
     async getBinary(key) {
-      const obj = await needFiles().get(key);
-      return obj ? obj.arrayBuffer() : null;
+      if (FILES) {
+        const obj = await FILES.get(key);
+        return obj ? obj.arrayBuffer() : null;
+      }
+      await init();
+      const { results } = await DB.prepare("SELECT data FROM bin WHERE key = ? ORDER BY part").bind(key).all();
+      if (!results.length) return null;
+      const buf = Buffer.from(results.map((r) => r.data).join(""), "base64");
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     },
     async setBinary(key, data) {
-      await needFiles().put(key, data);
+      if (FILES) return void (await FILES.put(key, data));
+      await init();
+      const b64 = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data).toString("base64");
+      const stmts = [DB.prepare("DELETE FROM bin WHERE key = ?").bind(key)];
+      for (let i = 0, part = 0; i < b64.length; i += PART, part++) stmts.push(DB.prepare("INSERT INTO bin (key, part, data) VALUES (?, ?, ?)").bind(key, part, b64.slice(i, i + PART)));
+      await DB.batch(stmts);
     },
     async list(prefix = "") {
       await init();
       const keys = new Set();
       const { results } = await DB.prepare("SELECT key FROM kv WHERE key >= ? AND key < ?").bind(prefix, upper(prefix)).all();
       for (const r of results) keys.add(r.key);
+      const bins = await DB.prepare("SELECT DISTINCT key FROM bin WHERE key >= ? AND key < ?").bind(prefix, upper(prefix)).all();
+      for (const r of bins.results) keys.add(r.key);
       if (FILES) {
         let cursor;
         do {
