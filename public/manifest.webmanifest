@@ -1,0 +1,24 @@
+{
+  "name": "TurTahlil — Turistik korxonalar faoliyati tahlili",
+  "short_name": "TurTahlil",
+  "description": "Turistik korxonalar faoliyati tahlili fani bo'yicha interaktiv ta'lim platformasi: amaliy mashg'ulotlar, AI tekshiruv, tahlil laboratoriyasi va trenajyor.",
+  "lang": "uz",
+  "start_url": "/#/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#1d4ed8",
+  "categories": ["education", "finance"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Mavzular", "url": "/#/topics" },
+    { "name": "Amaliy mashg'ulotlar", "url": "/#/practice" },
+    { "name": "Tahlil laboratoriyasi", "url": "/#/lab" }
+  ]
+}

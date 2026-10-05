@@ -1,0 +1,18 @@
+{
+  "name": "turtahlil",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Turistik korxonalar faoliyati tahlili fani bo'yicha interaktiv ta'lim platformasi: amaliy mashg'ulotlar, AI tekshiruv, tahlil laboratoriyasi va trenajyor",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@breezystack/lamejs": "^1.2.7",
+    "@netlify/blobs": "^11.1.2"
+  }
+}
