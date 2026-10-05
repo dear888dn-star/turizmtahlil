@@ -1,9 +1,8 @@
-// Gemini TTS: o'zbekcha matnni AI ovoziga aylantirish, MP3 ga siqish va Netlify Blobs'da keshlash.
+// Gemini TTS: o'zbekcha matnni AI ovoziga aylantirish, MP3 (yoki WAV) ga o'girish va omborda keshlash.
 // Bir xil matn (ovoz + uslub bilan) faqat bir marta yaratiladi — keyin hamma uchun keshdan beriladi.
 import crypto from "node:crypto";
-import { Mp3Encoder } from "@breezystack/lamejs";
 
-const API = process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta";
+const api = () => process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta";
 const FALLBACK_MODELS = ["gemini-2.5-flash-preview-tts", "gemini-2.5-flash-tts", "gemini-2.5-pro-preview-tts"];
 
 // Gemini'ning tayyor ovozlari (jinsi va xarakteri)
@@ -37,7 +36,7 @@ export async function ttsModels() {
   if (modelCache && Date.now() - modelCache.at < 6 * 3600_000) return modelCache.list;
   let list = [];
   try {
-    const r = await fetch(`${API}/models?pageSize=200`, { headers: { "x-goog-api-key": process.env.GEMINI_API_KEY } });
+    const r = await fetch(`${api()}/models?pageSize=200`, { headers: { "x-goog-api-key": process.env.GEMINI_API_KEY } });
     if (r.ok) {
       const d = await r.json();
       list = (d.models || [])
@@ -56,7 +55,28 @@ export function ttsKey(text, voice, style) {
   return crypto.createHash("sha256").update(`${voice}|${style}|${text}`).digest("hex").slice(0, 40);
 }
 
-function toMp3(pcm, rate) {
+/** Audio formati: "mp3" (standart) yoki "wav" (siqishsiz — Cloudflare'ning bepul tarifida protsessor vaqtini tejaydi). */
+export const audioFormat = () => (process.env.TTS_FORMAT === "wav" ? "wav" : "mp3");
+
+function toWav(pcm, rate) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+async function toMp3(pcm, rate) {
+  const { Mp3Encoder } = await import("@breezystack/lamejs");
   const samples = new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.byteLength / 2));
   const enc = new Mp3Encoder(1, rate, 64);
   const out = [];
@@ -115,7 +135,7 @@ export function dialogueScript(dialogue) {
 }
 
 async function callTts(model, prompt, speechConfig) {
-  return fetch(`${API}/models/${model}:generateContent`, {
+  return fetch(`${api()}/models/${model}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig } }),
@@ -156,7 +176,8 @@ export async function synthesize(text, { voice = "Kore", style = "narrator", dia
       }
       const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || "")?.[1]) || 24000;
       const pcm = Buffer.from(part.inlineData.data, "base64");
-      return { audio: toMp3(pcm, rate), model, seconds: pcm.length / 2 / rate };
+      const format = audioFormat();
+      return { audio: format === "wav" ? toWav(pcm, rate) : await toMp3(pcm, rate), format, model, seconds: pcm.length / 2 / rate };
     }
     const raw = await r.text().catch(() => "");
     console.error(`Gemini TTS (${model}) ${r.status}:`, raw.slice(0, 600));

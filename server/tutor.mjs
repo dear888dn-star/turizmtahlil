@@ -1,6 +1,6 @@
 // "AI Ustoz": o'quv qo'llanma mavzusi matniga tayangan savol-javob yordamchisi.
 // AI kaliti bo'lmasa, savolga eng mos qo'llanma parchalari topilib ko'rsatiladi (qidiruv rejimi).
-import { TOPICS } from "../../public/data/topics.js";
+import { TOPICS } from "../public/data/topics.js";
 
 const strip = (html) =>
   String(html || "")

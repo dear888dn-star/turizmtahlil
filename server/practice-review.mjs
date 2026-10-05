@@ -2,8 +2,8 @@
 // Mezonlar amaliy mashg'ulotlar to'plamidagi tavsiya etilgan baholash mezoni asosida (jami 10 ball).
 // AI kaliti bo'lmasa — hisob-kitoblar avtomatik tekshiriladi, ochiq javoblar uchun qoidaga asoslangan
 // (kalit so'zlar, hajm, raqamlardan foydalanish) taxminiy baho va tavsiyalar beriladi.
-import { TOPICS } from "../../public/data/topics.js";
-import { checkField, parseNum } from "../../public/data/practice.js";
+import { TOPICS } from "../public/data/topics.js";
+import { checkField, parseNum } from "../public/data/practice.js";
 
 export const REVIEW_CRITERIA = [
   { key: "formulas", name: "Formulalar va ko'rsatkichlarni to'g'ri qo'llash", max: 3 },

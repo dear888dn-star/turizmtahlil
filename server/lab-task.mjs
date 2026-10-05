@@ -1,6 +1,6 @@
 // "Tahlil laboratoriyasi": turistik korxona faoliyatining kompleks tahlili loyihasi —
 // baholash rubrikasi (100 ball), darajalar va AI tekshiruv prompti.
-import { analyze, NORMS, fmt, pct, LAB_SECTIONS } from "../../public/js/finance.js";
+import { analyze, NORMS, fmt, pct, LAB_SECTIONS } from "../public/js/finance.js";
 
 export { LAB_SECTIONS };
 

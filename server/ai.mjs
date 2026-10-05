@@ -3,19 +3,19 @@
 // Ikkala kalit ham bo'lsa, Claude ishlatiladi; hech biri bo'lmasa, trenajyor demo-rejimda ishlaydi.
 import Anthropic from "@anthropic-ai/sdk";
 
-const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+// Muhit o'zgaruvchilari har safar o'qiladi (Cloudflare'da ular so'rov kelganda o'rnatiladi).
+const claudeModel = () => process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 // Vergul bilan ajratilgan modellar zanjiri: birinchisi band yoki mavjud bo'lmasa, keyingisi sinab ko'riladi.
-const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-flash-lite-latest")
-  .split(",")
-  .map((m) => m.trim())
-  .filter(Boolean);
+const geminiModels = () =>
+  (process.env.GEMINI_MODEL || "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-flash-lite-latest")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
 
 export const provider = () => (process.env.ANTHROPIC_API_KEY ? "claude" : process.env.GEMINI_API_KEY ? "gemini" : null);
 export const aiEnabled = () => provider() !== null;
-export const modelName = () => (provider() === "claude" ? CLAUDE_MODEL : provider() === "gemini" ? GEMINI_MODELS[0] : "demo");
+export const modelName = () => (provider() === "claude" ? claudeModel() : provider() === "gemini" ? geminiModels()[0] : "demo");
 
-// Eski importlar uchun (sessiya yozuvida qaysi model ishlatilgani saqlanadi).
-export const MODEL = CLAUDE_MODEL;
 
 const REFUSAL_TEXT = "\n\n[Trenajyor bu xabarga javob bera olmadi. Iltimos, vaziyat doirasida boshqacha ifodalab ko'ring.]";
 const encoder = new TextEncoder();
@@ -38,10 +38,10 @@ function claudeClient() {
 }
 
 function claudeParams({ system, messages, maxTokens, effort, format }) {
-  const params = { model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages };
-  if (!/haiku/.test(CLAUDE_MODEL)) params.output_config = { effort };
+  const params = { model: claudeModel(), max_tokens: maxTokens, system, messages };
+  if (!/haiku/.test(claudeModel())) params.output_config = { effort };
   if (format) params.output_config = { ...(params.output_config || {}), format };
-  if (FALLBACK_MODELS.has(CLAUDE_MODEL)) {
+  if (FALLBACK_MODELS.has(claudeModel())) {
     params.betas = ["server-side-fallback-2026-07-01"];
     params.fallbacks = "default";
   }
@@ -76,7 +76,7 @@ async function claudeComplete(opts) {
 
 // ---------------- Gemini ----------------
 
-const GEMINI_URL = `${process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta"}/models`;
+const geminiUrl = () => `${process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta"}/models`;
 const RETRYABLE = new Set([404, 429, 500, 503]);
 
 function geminiBody({ system, messages, maxTokens, format }) {
@@ -95,8 +95,8 @@ function geminiBody({ system, messages, maxTokens, format }) {
 /** Modellar zanjiri bo'yicha so'rov yuboradi; band/mavjud bo'lmagan model o'tkazib yuboriladi. */
 async function geminiFetch(method, opts) {
   let last;
-  for (const model of GEMINI_MODELS) {
-    const url = `${GEMINI_URL}/${model}:${method}${method === "streamGenerateContent" ? "?alt=sse" : ""}`;
+  for (const model of geminiModels()) {
+    const url = `${geminiUrl()}/${model}:${method}${method === "streamGenerateContent" ? "?alt=sse" : ""}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
@@ -184,7 +184,7 @@ export const voiceEnabled = () => Boolean(process.env.GEMINI_API_KEY);
 async function geminiRaw(models, body) {
   let last;
   for (const model of models) {
-    const res = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
+    const res = await fetch(`${geminiUrl()}/${model}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
       body: JSON.stringify(body),
@@ -202,7 +202,7 @@ async function geminiRaw(models, body) {
 /** Yozib olingan nutqni matnga aylantiradi (brauzerda nutqni tanish imkoni bo'lmaganda). */
 export async function transcribeAudio(base64, mimeType, { language = "o'zbek" } = {}) {
   const lang = language === "ingliz" ? "English" : "Uzbek (write in Uzbek Latin script)";
-  const data = await geminiRaw(GEMINI_MODELS, {
+  const data = await geminiRaw(geminiModels(), {
     contents: [{ parts: [{ inlineData: { mimeType, data: base64 } }, { text: `Transcribe this speech exactly as spoken. Language: ${lang}. Return only the transcript text, without quotes or comments. If there is no speech, return an empty string.` }] }],
     generationConfig: { maxOutputTokens: 800 },
   });

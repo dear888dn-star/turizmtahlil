@@ -32,26 +32,27 @@ So'rovnomalar funksiyasi bu platformada **yo'q**.
 
 ## Texnologiyalar
 
-- Frontend oddiy HTML/CSS/JavaScript (ES modullar), yig'ish bosqichi yo'q.
-- Backend: Netlify Functions (`netlify/functions/api.mjs`), ma'lumotlar Netlify Blobs'da saqlanadi.
-- AI: Google Gemini (bepul kalit) yoki Claude API. Kalit bo'lmasa, AI tekshiruvi avtomatik qoidalar asosida taxminiy baho beradi, trenajyor esa demo-rejimda ishlaydi.
+- Frontend oddiy HTML/CSS/JavaScript (ES modullar), yig'ish bosqichi yo'q (`public/`).
+- Server kodi umumiy: `server/` (`app.mjs` — API, `store.mjs` — ombor interfeysi).
+- **Asosiy joylashtirish — Cloudflare Pages.** Ulagich: `functions/api/[[path]].js`; ma'lumotlar D1 bazasida, fayllar R2'da (`server/store-d1.mjs`). Yo'riqnoma: **[CLOUDFLARE.md](CLOUDFLARE.md)**.
+- **Zaxira — Netlify.** Ulagich: `netlify/functions/api.mjs`; ma'lumotlar Netlify Blobs'da (`server/store-netlify.mjs`); sozlamalar: `netlify.toml`.
+- AI: Google Gemini (bepul kalit) yoki Claude API. Kalit bo'lmasa, AI tekshiruvi taxminiy baho beradi, trenajyor esa demo-rejimda ishlaydi.
 
-## Netlify'ga joylashtirish
+## Netlify'ga joylashtirish (zaxira)
 
 1. [app.netlify.com](https://app.netlify.com) sahifasida **Add new site → Import an existing project → GitHub** ni tanlang va `turizmtahlil` repozitoriysini ko'rsating. Sozlamalar `netlify.toml` dan olinadi.
 2. **Environment variables** bo'limiga quyidagilarni kiriting:
-   - `JWT_SECRET` (majburiy) — uzun tasodifiy satr;
-   - `TEACHER_CODE` (majburiy) — o'qituvchilar ro'yxatdan o'tishi uchun kod;
-   - `GEMINI_API_KEY` (tavsiya) — [aistudio.google.com](https://aistudio.google.com) saytidan bepul olinadi. U AI tekshiruv, trenajyor, AI Ustoz va AI ovozni yoqadi;
-   - ixtiyoriy: `ANTHROPIC_API_KEY` va `ANTHROPIC_MODEL`.
-3. **Deploy** tugmasini bosing, so'ng saytda **Ro'yxatdan o'tish → O'qituvchi** orqali `TEACHER_CODE` bilan kiring.
-
-Sozlamalar holatini tekshirish uchun `https://<sayt>.netlify.app/api/health` manzilini oching.
+   - `JWT_SECRET` va `TEACHER_CODE` (majburiy);
+   - `GEMINI_API_KEY` (tavsiya);
+   - ixtiyoriy: `ANTHROPIC_API_KEY`.
+3. Netlify bepul tarifida har bir deploy 15 kredit turadi. Kredit tejash uchun **Build & deploy → Stop builds** ni yoqing va saytni faqat qo'lda (**Trigger deploy**) yangilang.
 
 ## Lokal ishga tushirish
 
 ```bash
 npm install
 cp .env.example .env   # ixtiyoriy: GEMINI_API_KEY
-npm run dev            # http://localhost:8888, o'qituvchi kodi: ustoz-local
+npm run dev            # Netlify muhiti: http://localhost:8888, o'qituvchi kodi: ustoz-local
 ```
+
+Cloudflare muhitida lokal sinov: [CLOUDFLARE.md](CLOUDFLARE.md#lokal-sinov-cloudflare-muhitida).

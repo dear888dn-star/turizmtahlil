@@ -1,4 +1,5 @@
-// Ma'lumotlar ombori: Netlify'da Netlify Blobs, lokal rejimda .data/ papkasidagi JSON fayllar.
+// Netlify uchun ma'lumotlar ombori: Netlify Blobs, lokal rejimda .data/ papkasidagi JSON fayllar.
+// Interfeys (get/set/del/getBinary/setBinary/list) server/store.mjs da tavsiflangan.
 import { getStore } from "@netlify/blobs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -69,18 +70,8 @@ function blobStore() {
   };
 }
 
-let instance;
-export function db() {
-  if (!instance) {
-    const localDir = process.env.VGT_LOCAL_DATA;
-    instance = localDir ? fileStore(path.join(localDir, STORE_NAME)) : blobStore();
-  }
-  return instance;
-}
-
-export async function getMany(prefix) {
-  const store = db();
-  const keys = await store.list(prefix);
-  const items = await Promise.all(keys.map((k) => store.get(k)));
-  return items.filter(Boolean);
+/** Netlify yoki lokal (fayl) ombori. */
+export function netlifyStore() {
+  const localDir = process.env.VGT_LOCAL_DATA;
+  return localDir ? fileStore(path.join(localDir, STORE_NAME)) : blobStore();
 }
