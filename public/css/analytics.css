@@ -117,3 +117,32 @@ pre.book-pre { white-space: pre; overflow-x: auto; font-family: "JetBrains Mono"
   .topbar, .footer, .lesson-rail, .notes-wrap, .tutor-fab, .ai-btn, .no-print, button { display: none !important; }
   .chapter { break-inside: avoid; }
 }
+
+/* ---------- Katta ekran uchun kirish QR-kodi (#/qr) ---------- */
+body.qr-mode .topbar, body.qr-mode .footer, body.qr-mode .xp-stack { display: none !important; }
+body.qr-mode main.container { max-width: none; padding: 0; }
+body.qr-mode::before, body.qr-mode::after { display: none; }
+body.qr-mode { background: #fff; }
+.qr-screen {
+  position: relative; min-height: 100vh; min-height: 100dvh; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; gap: 5vw; padding: 4vh 4vw;
+  background: #fff; color: #0f172a;
+}
+.qr-code { flex: none; width: min(86vh, 52vw); width: min(86dvh, 52vw); aspect-ratio: 1; }
+.qr-code svg { display: block; width: 100%; height: 100%; }
+.qr-side { max-width: 38vw; }
+.qr-tag { color: #1d4ed8; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: clamp(.8rem, 1.4vw, 1.2rem); }
+.qr-side h1 { color: #1d4ed8; font-size: clamp(2rem, 5vw, 4.6rem); line-height: 1.05; margin: .3em 0 .2em; }
+.qr-course { font-size: clamp(1.1rem, 2.2vw, 2rem); font-weight: 700; margin: 0 0 1.2em; }
+.qr-steps { font-size: clamp(1rem, 2vw, 1.8rem); line-height: 1.5; padding-left: 1.3em; margin: 0 0 1.2em; }
+.qr-url { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: clamp(.95rem, 1.8vw, 1.6rem); color: #1d4ed8; word-break: break-all; }
+.qr-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
+.qr-tools .btn { color: #0f172a; border-color: #cbd5e1; background: #fff; }
+:fullscreen .qr-tools { opacity: .15; transition: opacity .2s; }
+:fullscreen .qr-tools:hover { opacity: 1; }
+@media (orientation: portrait), (max-width: 760px) {
+  .qr-screen { flex-direction: column-reverse; gap: 3vh; padding-top: 64px; text-align: center; }
+  .qr-code { width: min(88vw, 60vh); width: min(88vw, 60dvh); }
+  .qr-side { max-width: none; }
+  .qr-steps { display: inline-block; text-align: left; }
+}
