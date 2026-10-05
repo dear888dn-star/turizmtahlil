@@ -1,7 +1,7 @@
 // TurTahlil — service worker: ilovani o'rnatish va internetsiz rejim.
 // Statik fayllar (sahifa, uslublar, skriptlar, mavzu rasmlari) keshdan tez ochiladi va fonda yangilanadi.
 // API so'rovlari keshlanmaydi (taqdimot/video bo'laklari va AI ovoz fayllaridan tashqari — ular o'zgarmaydi).
-const VERSION = "turtahlil-v1";
+const VERSION = "turtahlil-v2";
 const SHELL = ["/", "/index.html", "/css/style.css", "/css/motion.css", "/css/features.css", "/css/media.css", "/css/live.css", "/css/analytics.css", "/js/app.js", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

@@ -71,7 +71,7 @@ export async function render(el, tab = "", param) {
       content
     );
   } else {
-    mount(el, h("div", { class: "page-head" }, h("h1", {}, "O'qituvchi paneli")), content);
+    mount(el, h("div", { class: "page-head" }, h("h1", {}, "O'qituvchi paneli"), h("a", { class: "btn", href: "#/qr" }, "📱 Kirish QR-kodi")), content);
   }
   mount(content, loading());
   await view(content, param);

@@ -20,6 +20,7 @@ import * as live from "./pages/live.js";
 import * as practice from "./pages/practice.js";
 import * as lab from "./pages/lab.js";
 import * as updates from "./pages/updates.js";
+import * as qr from "./pages/qr.js";
 
 const routes = [
   [/^\/?$/, home.render],
@@ -45,6 +46,7 @@ const routes = [
   [/^\/live\/play\/(\d{6})$/, live.renderPlay],
   [/^\/live\/host\/(\d{6})$/, live.renderHost, { teacher: true }],
   [/^\/cert\/([\w-]+)$/, cert.render],
+  [/^\/qr$/, qr.render],
 ];
 
 const NAV = [
@@ -87,6 +89,8 @@ async function route() {
   document.body.classList.remove("nav-open");
   // Jonli viktorina — to'liq ekranli o'yin rejimi (menyu va pastki panelsiz)
   document.body.classList.toggle("live-mode", /^\/live(\/|$)/.test(path));
+  // Katta ekrandagi QR-kod — menyusiz, butun ekranni egallaydi
+  document.body.classList.toggle("qr-mode", path === "/qr");
   document.querySelectorAll(".modal-overlay").forEach((m) => m.remove());
   toggle.setAttribute("aria-expanded", "false");
   renderNav();
