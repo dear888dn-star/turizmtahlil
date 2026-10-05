@@ -1351,7 +1351,7 @@ function describeError(err) {
 }
 
 async function health() {
-  const checks = { blobs: "tekshirilmoqda", jwtSecret: process.env.JWT_SECRET ? "o'rnatilgan" : "avtomatik (omborda)", teacherCode: process.env.TEACHER_CODE ? "o'rnatilgan" : "o'rnatilmagan", ai: provider() ? `${provider()} (${modelName()})` : "demo-rejim", node: process.version, platform: process.env.CF_PAGES ? "Cloudflare Pages" : "Netlify / Node" };
+  const checks = { blobs: "tekshirilmoqda", jwtSecret: process.env.JWT_SECRET ? "o'rnatilgan" : "avtomatik (omborda)", teacherCode: process.env.TEACHER_CODE ? "o'rnatilgan" : "o'rnatilmagan", ai: provider() ? `${provider()} (${modelName()})` : "demo-rejim", node: process.version, platform: process.env.CF_PAGES ? "Cloudflare" : "Netlify / Node" };
   checks.tts = ttsEnabled() ? `gemini (${(await ttsModels().catch(() => []))[0] || "model topilmadi"})` : "o'chiq (brauzer ovozi)";
   try {
     await db().set("meta/health", { at: new Date().toISOString() });
