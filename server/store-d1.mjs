@@ -36,6 +36,23 @@ export function d1Store(DB, FILES) {
       await DB.batch([DB.prepare("DELETE FROM kv WHERE key = ?").bind(key), DB.prepare("DELETE FROM bin WHERE key = ?").bind(key)]);
       if (FILES) await FILES.delete(key).catch(() => {});
     },
+    /** Prefiks bo'yicha hammasini bitta so'rovda o'chirish (masalan, eski AI ovozlari keshi). */
+    async delPrefix(prefix) {
+      await init();
+      const res = await DB.batch([
+        DB.prepare("DELETE FROM kv WHERE key >= ? AND key < ?").bind(prefix, upper(prefix)),
+        DB.prepare("DELETE FROM bin WHERE key >= ? AND key < ?").bind(prefix, upper(prefix)),
+      ]);
+      if (FILES) {
+        let cursor;
+        do {
+          const page = await FILES.list({ prefix, cursor });
+          if (page.objects.length) await FILES.delete(page.objects.map((o) => o.key));
+          cursor = page.truncated ? page.cursor : undefined;
+        } while (cursor);
+      }
+      return res.reduce((n, r) => n + (r.meta?.changes || 0), 0);
+    },
     async getBinary(key) {
       if (FILES) {
         const obj = await FILES.get(key);

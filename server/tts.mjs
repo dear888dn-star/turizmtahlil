@@ -20,8 +20,7 @@ export const VOICES = [
 ];
 const VOICE_IDS = new Set(VOICES.map((v) => v.id));
 
-// Uslub ko'rsatmalari ("rejissyor izohi"). Ular ovoz chiqarib O'QILMAYDI: Gemini TTS uchun tavsiya etilgan tuzilma —
-// qisqa kirish gapi, "### DIRECTOR'S NOTES" bloki va o'qiladigan matn faqat "#### TRANSCRIPT" sarlavhasidan keyin.
+// Uslub ko'rsatmalari (til, ohang). Ular ovozga aylantiriladigan matnga qo'shilmaydi — pastdagi ttsInstruction'ga qarang.
 export const STYLES = {
   narrator: "Uzbek language (Latin script) with natural, correct Uzbek pronunciation; do not translate. Warm, clear teacher narrating a lesson; calm, even pace.",
   guide: "Uzbek language with natural, correct Uzbek pronunciation; do not translate. Enthusiastic, friendly professional tour guide.",
@@ -29,22 +28,16 @@ export const STYLES = {
   english: "Clear, natural English.",
 };
 
-/** TTS so'rovi matni: ko'rsatmalar alohida blokda, o'qiladigan qism faqat TRANSCRIPT ostida. */
-export function ttsPrompt(style, transcript, extraNotes = "") {
-  return [
-    "Synthesize speech for the transcript below. Speak ONLY the text under the TRANSCRIPT heading. Never read the headings or the director's notes aloud.",
-    "",
-    "### DIRECTOR'S NOTES",
-    `Style: ${STYLES[style] || STYLES.narrator}`,
-    extraNotes || null,
-    "",
-    "#### TRANSCRIPT",
-    transcript,
-  ].filter((x) => x !== null && x !== undefined).join("\n");
+/**
+ * Uslub ko'rsatmasi modelga "system instruction" sifatida yuboriladi, ovozga aylantiriladigan matnga (contents)
+ * esa FAQAT ma'ruza matni kiradi — shuning uchun ko'rsatma hech qachon ovoz chiqarib o'qilmaydi.
+ */
+export function ttsInstruction(style, extra = "") {
+  return `You are a text-to-speech voice. Speak only the user's text, exactly as written. ${STYLES[style] || STYLES.narrator}${extra ? ` ${extra}` : ""}`;
 }
 
-// Prompt formati o'zgarganda oshiriladi: eski (ko'rsatma ham o'qib yuborilgan) audiolar keshdan ishlatilmaydi.
-const PROMPT_VERSION = 2;
+// Prompt formati o'zgarganda oshiriladi: ko'rsatma ham o'qib yuborilgan eski audiolar keshdan ishlatilmaydi.
+const PROMPT_VERSION = 3;
 
 export const ttsEnabled = () => Boolean(process.env.GEMINI_API_KEY);
 
@@ -153,12 +146,26 @@ export function dialogueScript(dialogue) {
   return { slots, lines };
 }
 
-async function callTts(model, prompt, speechConfig) {
-  return fetch(`${api()}/models/${model}:generateContent`, {
+// System instruction'ni qabul qilmaydigan TTS modellar (birinchi rad javobidan keyin eslab qolinadi)
+const noSystem = new Set();
+
+async function callTts(model, transcript, instruction, speechConfig) {
+  const body = { contents: [{ role: "user", parts: [{ text: transcript }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig } };
+  if (instruction && !noSystem.has(model)) body.systemInstruction = { parts: [{ text: instruction }] };
+  const r = await fetch(`${api()}/models/${model}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig } }),
+    body: JSON.stringify(body),
   });
+  // Model system instruction'ni qo'llamasa (400), ko'rsatmasiz — faqat matnning o'zi bilan qayta so'raladi
+  if (r.status === 400 && body.systemInstruction) {
+    const raw = await r.clone().text().catch(() => "");
+    if (/system|instruction|developer/i.test(raw)) {
+      noSystem.add(model);
+      return callTts(model, transcript, null, speechConfig);
+    }
+  }
+  return r;
 }
 
 /**
@@ -167,25 +174,29 @@ async function callTts(model, prompt, speechConfig) {
  */
 export async function synthesize(text, { voice = "Kore", style = "narrator", dialogue = null } = {}) {
   if (!ttsEnabled()) throw new TtsError("AI ovozi sozlanmagan (GEMINI_API_KEY)", 503);
-  let prompt;
+  let transcript;
+  let instruction;
   let speechConfig;
   if (dialogue?.length) {
     const { slots, lines } = dialogueScript(dialogue);
     if (slots.length < 2) {
-      prompt = ttsPrompt(style, lines.map((l) => l.text).join(" "));
+      transcript = lines.map((l) => l.text).join(" ");
+      instruction = ttsInstruction(style);
       speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: slots[0].voice } } };
     } else {
-      prompt = ttsPrompt(style, lines.map((l) => `${l.label}: ${l.text}`).join("\n"), `Conversation: each transcript line starts with a speaker label (${slots.map((x) => x.label).join(", ")}); never read the labels aloud.`);
+      transcript = lines.map((l) => `${l.label}: ${l.text}`).join("\n");
+      instruction = ttsInstruction(style, `This is a conversation; each line starts with a speaker label (${slots.map((x) => x.label).join(", ")}). Never read the labels aloud.`);
       speechConfig = { multiSpeakerVoiceConfig: { speakerVoiceConfigs: slots.map((x) => ({ speaker: x.label, voiceConfig: { prebuiltVoiceConfig: { voiceName: x.voice } } })) } };
     }
   } else {
-    prompt = ttsPrompt(style, text);
+    transcript = text;
+    instruction = ttsInstruction(style);
     speechConfig = { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE_IDS.has(voice) ? voice : "Kore" } } };
   }
   let last = null;
   let rateLimited = null;
   for (const model of await ttsModels()) {
-    const r = await callTts(model, prompt, speechConfig);
+    const r = await callTts(model, transcript, instruction, speechConfig);
     if (r.ok) {
       const d = await r.json();
       const part = (d?.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData?.data);
