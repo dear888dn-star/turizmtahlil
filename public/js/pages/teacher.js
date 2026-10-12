@@ -373,7 +373,7 @@ async function voicesManager(el) {
   const st = await api.get("admin/tts");
   const fmtMin = (sec) => `${Math.floor(sec / 60)} daq ${Math.round(sec % 60)} s`;
   if (!st.enabled) {
-    mount(el, h("div", { class: "alert alert-warn" }, h("b", {}, "AI ovozi o'chiq. "), "Netlify sozlamalarida GEMINI_API_KEY o'zgaruvchisini qo'shing — shundan keyin trenajyor, animatsion darslar va audiokitob o'zbek tilida tabiiy AI ovozida gapiradi."));
+    mount(el, h("div", { class: "alert alert-warn" }, h("b", {}, "AI ovozi o'chiq. "), "Cloudflare (yoki Netlify) sozlamalarida GEMINI_API_KEY kalitini qo'shing — shundan keyin trenajyor, animatsion darslar va audiokitob o'zbek tilida tabiiy AI ovozida gapiradi."));
     return;
   }
   let voice = st.defaultVoice;
@@ -485,7 +485,19 @@ async function voicesManager(el) {
       h("p", { class: "muted small" }, "Gemini bepul tarifida TTS so'rovlari soni cheklangan. Ovozlarni oldindan tayyorlab qo'ysangiz, talabalar darhol tinglaydi va limit sarflanmaydi. Limit tugasa navbat avtomatik kutib, davom etadi — kerak bo'lsa ertaga qayta ishga tushiring: tayyorlanganlari o'tkazib yuboriladi."),
       h("div", { class: "row wrap" },
         h("button", { class: "btn", onclick: () => run("lessons", "Animatsion darslar") }, `🎬 Animatsion darslar (${jobs.lessons().length})`),
-        h("button", { class: "btn ghost danger-text", onclick: () => (stopRequested = true) }, "⏹ To'xtatish")),
+        h("button", { class: "btn ghost danger-text", onclick: () => (stopRequested = true) }, "⏹ To'xtatish"),
+        h("button", { class: "btn ghost danger-text", onclick: async () => {
+          if (running) return toast("Avval navbatni to'xtating", "warn");
+          if (!(await confirmDialog("Barcha tayyor AI ovozlari o'chiriladi va keyin yangidan yaratiladi (Gemini limitidan foydalanadi). Davom etasizmi?"))) return;
+          try {
+            const r = await api.del("admin/tts/cache");
+            resetTtsInfo();
+            toast(`Eski ovozlar o'chirildi (${r.removed} ta yozuv). Endi qayta tayyorlang.`, "ok");
+            voicesManager(el);
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        } }, "🗑 Eski ovozlarni o'chirish")),
       h("div", { class: "row wrap" }, h("span", { class: "muted small" }, "🎧 Audiokitob:"), TOPICS.map((t) => h("button", { class: "chip", title: t.title, onclick: () => run(`book-${t.id}`, `${t.num}-mavzu audiokitobi`) }, `${t.num}-mavzu`))),
       bar,
       log)

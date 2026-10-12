@@ -954,6 +954,19 @@ async function adminTts(req) {
   });
 }
 
+/** Barcha AI ovozlari keshini o'chirish — keyingi tinglashda (yoki oldindan tayyorlashda) yangidan yaratiladi. */
+async function clearTtsCache(req) {
+  await requireTeacher(req);
+  const store = db();
+  let removed = 0;
+  for (const prefix of ["ttsmeta/", "ttsbin/"]) {
+    if (store.delPrefix) removed += await store.delPrefix(prefix);
+    else for (const k of await store.list(prefix)) (await store.del(k), removed++);
+  }
+  await store.del("meta/tts-last-error").catch(() => {});
+  return json({ ok: true, removed });
+}
+
 // ---------- Test tahlili (item-analiz) ----------
 
 async function adminItems(req) {
@@ -1709,6 +1722,7 @@ const routes = [
   ["GET", /^tts\/audio\/([0-9a-f]{40})\.(mp3|wav)$/, ttsAudio],
   ["GET", /^admin\/tts$/, adminTts],
   ["PUT", /^admin\/tts$/, setTtsSettings],
+  ["DELETE", /^admin\/tts\/cache$/, clearTtsCache],
   ["POST", /^topics\/([\w-]+)\/ask$/, topicAsk],
   ["GET", /^certificate$/, myCertificate],
   ["POST", /^certificate$/, issueCertificate],
