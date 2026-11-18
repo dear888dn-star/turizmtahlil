@@ -1182,9 +1182,11 @@ async function liveCreate(req) {
   const b = await body(req);
   if (b.kind === "cloud") return cloudCreate(teacher, b);
   const ids = Array.isArray(b.topicIds) && b.topicIds.length ? b.topicIds : TOPICS.map((t) => t.id);
-  const pool = TOPICS.filter((t) => ids.includes(t.id)).flatMap((t) => t.quiz.map((q) => ({ ...q, topic: t.num })));
-  if (!pool.length) throw new HttpError(400, "Tanlangan mavzularda test savollari yo'q");
-  const count = Math.max(3, Math.min(30, Number(b.count) || 10));
+  const chosen = TOPICS.filter((t) => ids.includes(t.id));
+  // Savollar banki (har mavzuda ≥ 30): testlar, glossariy, formula va (ixtiyoriy) hisob-kitob savollari
+  const pool = chosen.flatMap((t) => (t.bank || t.quiz).filter((q) => b.calc !== false || q.kind !== "calc").map((q) => ({ ...q, topic: t.num })));
+  if (!pool.length) throw new HttpError(400, "Tanlangan mavzularda savollar yo'q");
+  const count = Math.max(3, Math.min(50, Number(b.count) || 10));
   const questions = shuffle(pool)
     .slice(0, count)
     .map((q) => {
@@ -1199,6 +1201,7 @@ async function liveCreate(req) {
     title: str(b.title, 100) || "Live viktorina",
     duration: Math.max(10, Math.min(90, Number(b.duration) || 20)),
     readAloud: Boolean(b.readAloud),
+    topics: chosen.length === TOPICS.length ? [] : chosen.map((t) => t.num),
     questions, state: "lobby", qIndex: -1, qStartedAt: null, board: {}, dist: null, prevRanks: {},
     createdAt: new Date().toISOString(),
   };

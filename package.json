@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "check:variants": "node scripts/check-variants.mjs"
+    "check:variants": "node scripts/check-variants.mjs",
+    "check:bank": "node scripts/check-bank.mjs"
   },
   "engines": {
     "node": ">=20"

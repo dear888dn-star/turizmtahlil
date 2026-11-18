@@ -27,18 +27,36 @@ async function qrSvg(text, size = 220) {
 
 export function createForm() {
   const selected = new Set();
-  const count = h("input", { type: "number", min: 3, max: 30, value: 10 });
+  const count = h("input", { type: "number", min: 3, max: 50, value: 10 });
+  const calc = h("input", { type: "checkbox", checked: true });
   const duration = h("select", {}, [10, 15, 20, 30, 45, 60].map((d) => h("option", { value: d, selected: d === 20 }, `${d} soniya`)));
   const title = h("input", { placeholder: "Masalan: 7-mavzu bo'yicha musobaqa", maxlength: 100 });
   const readAloud = h("input", { type: "checkbox" });
-  const chips = h("div", { class: "chips" }, TOPICS.map((t) => h("button", { type: "button", class: "chip", title: t.title, onclick: (e) => {
+  // Tanlangan mavzular va ulardagi savollar soni doim ko'rinib turadi
+  const info = h("div", { class: "live-pick-info" });
+  const bankOf = (t) => (t.bank || t.quiz).filter((q) => calc.checked || q.kind !== "calc").length;
+  const drawInfo = () => {
+    const list = TOPICS.filter((t) => selected.has(t.id));
+    const n = (list.length ? list : TOPICS).reduce((s, t) => s + bankOf(t), 0);
+    info.replaceChildren(
+      list.length
+        ? h("span", {}, "✅ Tanlandi: ", h("b", {}, list.map((t) => `${t.num}-mavzu`).join(", ")), ` · ${n} ta savol mavjud`)
+        : h("span", { class: "warn-text" }, `⚠️ Mavzu tanlanmagan — savollar barcha ${TOPICS.length} mavzudan aralash olinadi (${n} ta). Aniq mavzu bo'yicha o'yin uchun mavzuni tanlang.`)
+    );
+    if (Number(count.value) > n) count.value = n;
+  };
+  const chips = h("div", { class: "live-topic-pick" }, TOPICS.map((t) => h("button", { type: "button", class: "chip live-topic", title: t.title, "aria-pressed": "false", onclick: (e) => {
     selected.has(t.id) ? selected.delete(t.id) : selected.add(t.id);
     e.currentTarget.classList.toggle("active", selected.has(t.id));
-  } }, `${t.icon} ${t.num}`)));
+    e.currentTarget.setAttribute("aria-pressed", String(selected.has(t.id)));
+    drawInfo();
+  } }, h("b", {}, `${t.icon} ${t.num}.`), " ", t.title, h("small", {}, ` · ${bankOf(t)}`))));
+  calc.addEventListener("change", drawInfo);
+  drawInfo();
   const btn = h("button", { class: "btn lg", onclick: async () => {
     btn.disabled = true;
     try {
-      const { pin } = await api.post("live", { topicIds: [...selected], count: Number(count.value), duration: Number(duration.value), title: title.value.trim(), readAloud: readAloud.checked });
+      const { pin } = await api.post("live", { topicIds: [...selected], count: Number(count.value), duration: Number(duration.value), title: title.value.trim(), readAloud: readAloud.checked, calc: calc.checked });
       location.hash = `#/live/host/${pin}`;
     } catch (e) {
       toast(e.message, "error");
@@ -51,8 +69,9 @@ export function createForm() {
     h("div", { class: "live-promo" }, h("div", {}, h("h2", {}, "🎮 TurTahlil Live — jonli sinf viktorinasi"), h("p", {}, "Savollar proyektorda chiqadi, talabalar telefonda QR-kod yoki PIN orqali qo'shilib javob beradi. To'g'ri va tez javob ko'proq ball beradi, ketma-ket to'g'ri javoblar uchun bonus. Har savoldan keyin jonli reyting, oxirida shohsupa.")), h("div", { class: "live-promo-shapes", "aria-hidden": "true" }, SHAPES.map((s, i) => h("span", { class: `opt-c${i}` }, s)))),
     h("div", { class: "card stack" },
       h("label", { class: "field" }, h("span", {}, "O'yin nomi"), title),
-      h("div", {}, h("b", {}, "Mavzular "), h("small", { class: "muted" }, "(tanlanmasa — barcha mavzulardan)"), chips),
-      h("div", { class: "grid cols-2" }, h("label", { class: "field" }, h("span", {}, "Savollar soni"), count), h("label", { class: "field" }, h("span", {}, "Har bir savolga vaqt"), duration)),
+      h("div", {}, h("b", {}, "Mavzular "), h("small", { class: "muted" }, "(bir yoki bir nechtasini bosib tanlang; raqam — mavzudagi savollar soni)"), chips, info),
+      h("div", { class: "grid cols-2" }, h("label", { class: "field" }, h("span", {}, "Savollar soni (3–50)"), count), h("label", { class: "field" }, h("span", {}, "Har bir savolga vaqt"), duration)),
+      h("label", { class: "check-row" }, calc, " 🧮 Hisob-kitob savollari ham bo'lsin (ular uchun 30–60 soniya tavsiya etiladi)"),
       h("label", { class: "check-row" }, readAloud, " 🔊 Savollarni AI ovozida o'qib berish (Gemini TTS)"),
       btn),
     cloudForm()
@@ -421,6 +440,7 @@ export async function renderHost(el, pin) {
         h("div", { class: "lh-lobby" },
           h("div", { class: "lh-join" },
             h("div", { class: "lh-title" }, "🎮 ", g.title),
+            h("div", { class: "lh-topics" }, g.topics?.length ? `📚 ${g.topics.map((n) => `${n}-mavzu`).join(", ")}` : "📚 Barcha mavzulardan"),
             h("p", {}, "Telefoningizda oching:"),
             h("div", { class: "lh-url" }, `${location.host}/#/live`),
             h("p", {}, "O'yin PIN-kodi:"),
@@ -436,8 +456,8 @@ export async function renderHost(el, pin) {
       const q = g.questions[g.qIndex];
       lastTickSec = -1;
       stage.replaceChildren(
-        h("div", { class: "lh-top" }, h("span", { class: "lh-qnum" }, `${g.qIndex + 1} / ${g.questions.length}`), h("span", { class: "lh-answered" }, `${g.answered} / ${g.players.length} javob`), h("button", { class: "btn ghost light", onclick: () => control("reveal") }, "Javoblarni ochish ⏭")),
-        h("div", { class: "lh-qwrap" }, h("div", { class: "lh-ring", style: { "--p": 100 } }, h("span", { class: "lh-count" }, Math.ceil(g.timeLeft / 1000))), h("h2", { class: "lh-q" }, q.q)),
+        h("div", { class: "lh-top" }, h("span", { class: "lh-qnum" }, `${g.qIndex + 1} / ${g.questions.length}`, q.topic ? h("small", { class: "lh-topic" }, ` · ${q.topic}-mavzu`) : ""), h("span", { class: "lh-answered" }, `${g.answered} / ${g.players.length} javob`), h("button", { class: "btn ghost light", onclick: () => control("reveal") }, "Javoblarni ochish ⏭")),
+        h("div", { class: "lh-qwrap" }, h("div", { class: "lh-ring", style: { "--p": 100 } }, h("span", { class: "lh-count" }, Math.ceil(g.timeLeft / 1000))), h("h2", { class: `lh-q ${q.q.length > 140 ? "long" : ""}` }, q.q)),
         h("div", { class: "lh-opts" }, q.options.map((o, i) => h("div", { class: `lh-opt opt-c${i}`, style: { "--i": i } }, h("span", { class: "shape" }, SHAPES[i]), h("span", {}, o))))
       );
       if (g.readAloud) narr.speak(`${q.q} ${q.options.map((o, i) => `${["A", "B", "C", "D"][i]}: ${o}.`).join(" ")}`, { style: "narrator" });

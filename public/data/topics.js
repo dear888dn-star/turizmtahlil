@@ -7,6 +7,7 @@ import { LAYER_A } from "./layer-a.js";
 import { LAYER_B } from "./layer-b.js";
 import { PRACTICE } from "./practice.js";
 import { updatesFor } from "./updates.js";
+import { buildBank } from "./quiz-bank.js";
 
 export const COURSE = {
   title: "Turistik korxonalar faoliyati tahlili",
@@ -75,6 +76,12 @@ export const TOPICS = BOOK.topics.map((b) => {
     trainer: [],
   };
 });
+
+// Live viktorina uchun savollar banki (har mavzuda ≥ 30 ta): testlar + glossariy + hisob-kitob + formula + qo'shimcha savollar
+{
+  const ctx = { allGlossary: TOPICS.flatMap((t) => t.glossary), allFormulas: [...new Set(TOPICS.flatMap((t) => (t.practice?.tasks || []).map((k) => k.formula).filter(Boolean)))] };
+  for (const t of TOPICS) t.bank = buildBank(t, ctx);
+}
 
 export const METHOD_INFO = {
   brainstorm: { name: "Aqliy hujum", icon: "💡", about: "G'oyalarni tanqidsiz, erkin va ko'p miqdorda yig'ish metodi." },
