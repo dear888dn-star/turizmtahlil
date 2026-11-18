@@ -818,6 +818,77 @@ async function gradeLab(req, userId, id) {
   return json(p);
 }
 
+// ---------- Baholar jurnali: mustaqil ish va amaliy mashg'ulot ballari ----------
+
+const SS_TASKS = TOPICS.flatMap((t) => t.selfStudy.map((s) => ({ id: s.id, topicId: t.id })));
+const PRACTICE_TOPICS = TOPICS.filter((t) => t.practice).map((t) => t.id);
+const round1 = (x) => Math.round(x * 10) / 10;
+
+/** Bitta talabaning ballari. selfStudy — selfstudy/ yozuvlari, reviews — practicereview/ yozuvlari. */
+function scoreSheet(selfStudy, reviews) {
+  const ss = {};
+  for (const x of selfStudy) {
+    const graded = Number.isFinite(x.grade) && !x.resubmitted;
+    ss[x.taskId] = { grade: graded ? x.grade : null, submitted: true, resubmitted: Boolean(x.resubmitted), at: x.submittedAt };
+  }
+  const graded = Object.values(ss).filter((x) => x.grade !== null);
+  const ssSum = graded.reduce((n, x) => n + x.grade, 0);
+  // Amaliy: har mavzu bo'yicha eng yaxshi natija; o'qituvchi bahosi qo'yilgan bo'lsa, AI bahosi o'rniga o'sha olinadi
+  const pr = {};
+  for (const r of reviews) {
+    const score = Number.isFinite(r.teacher?.grade) ? r.teacher.grade : r.total;
+    if (!Number.isFinite(score)) continue;
+    const cur = pr[r.topicId];
+    if (!cur || score > cur.score) pr[r.topicId] = { score, byTeacher: Number.isFinite(r.teacher?.grade), attempts: (cur?.attempts || 0) + 1 };
+    else cur.attempts++;
+  }
+  const prList = Object.values(pr);
+  const prSum = prList.reduce((n, x) => n + x.score, 0);
+  return {
+    selfStudy: {
+      tasks: ss,
+      submitted: Object.keys(ss).length,
+      graded: graded.length,
+      total: SS_TASKS.length,
+      avg: graded.length ? round1(ssSum / graded.length) : null,
+      sum: ssSum,
+      // 20 ballik shkala: barcha topshiriqlar bo'yicha (topshirilmagan yoki baholanmagan — 0)
+      rating: SS_TASKS.length ? round1((ssSum / (5 * SS_TASKS.length)) * 20) : 0,
+    },
+    practice: {
+      topics: pr,
+      done: prList.length,
+      total: PRACTICE_TOPICS.length,
+      avg: prList.length ? round1(prSum / prList.length) : null,
+      sum: round1(prSum),
+      rating: PRACTICE_TOPICS.length ? round1((prSum / (10 * PRACTICE_TOPICS.length)) * 20) : 0,
+    },
+  };
+}
+
+async function myGradebook(req) {
+  const user = await requireUser(req);
+  const [ss, reviews] = await Promise.all([getMany(`selfstudy/${user.id}/`), getMany(`practicereview/${user.id}/`)]);
+  return json(scoreSheet(ss, reviews));
+}
+
+async function adminGradebook(req) {
+  await requireTeacher(req);
+  const [users, ss, reviews] = await Promise.all([getMany("user/"), getEntries("selfstudy/"), getEntries("practicereview/")]);
+  const uidOf = (key) => key.split("/")[1];
+  const group = (entries) => {
+    const m = new Map();
+    for (const [k, v] of entries) (m.get(uidOf(k)) || m.set(uidOf(k), []).get(uidOf(k))).push(v);
+    return m;
+  };
+  const ssBy = group(ss);
+  const prBy = group(reviews);
+  const students = users
+    .filter((u) => u.role === "student")
+    .map((u) => ({ user: { id: u.id, name: u.name, group: u.group || "", college: u.college || "" }, ...scoreSheet(ssBy.get(u.id) || [], prBy.get(u.id) || []) }));
+  return json({ students, selfStudyTasks: SS_TASKS.length, practiceTopics: PRACTICE_TOPICS.length });
+}
+
 // ---------- Talaba faoliyati dalillari (XP, reyting, sertifikat) ----------
 
 function buildEvidence(progress, selfStudy, trainer, labsList) {
@@ -1739,6 +1810,8 @@ const routes = [
   ["POST", /^practice\/([\w-]+)\/review$/, practiceReview],
   ["GET", /^practice\/reviews$/, myPracticeReviews],
   ["GET", /^admin\/practice-reviews$/, adminPracticeReviews],
+  ["GET", /^gradebook$/, myGradebook],
+  ["GET", /^admin\/gradebook$/, adminGradebook],
   ["PUT", /^admin\/practice-reviews\/([\w-]+)\/([\w-]+)\/([\w-]+)$/, teacherPracticeComment],
   ["GET", /^labs$/, myLabs],
   ["PUT", /^labs\/([\w-]+)$/, saveLab],
