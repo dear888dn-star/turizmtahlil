@@ -3,12 +3,13 @@ import { api, session } from "../api.js";
 import { TOPICS } from "../../data/topics.js";
 import { loadProgress, updatePlan, setNote, topicCompletion } from "../progress.js";
 import { downloadSelfStudyPdf } from "../selfstudy-pdf.js";
+import { scoreTable } from "../scores.js";
 
 const JOURNAL_KEY = "__journal";
 
 export async function render(el) {
   mount(el, loading());
-  const [progress, submissions, sessions] = await Promise.all([loadProgress(), api.get("self-study"), api.get("trainer/sessions").catch(() => [])]);
+  const [progress, submissions, sessions, scores] = await Promise.all([loadProgress(), api.get("self-study"), api.get("trainer/sessions").catch(() => []), api.get("gradebook").catch(() => null)]);
   const subs = Object.fromEntries(submissions.map((s) => [s.taskId, s]));
   const allTasks = TOPICS.flatMap((t) => t.selfStudy.map((s) => ({ ...s, topic: t })));
 
@@ -46,6 +47,10 @@ export async function render(el) {
       pdfButton(() => session.user, () => submissions)),
     stats,
     recs.length > 0 && h("div", { class: "card accent" }, h("h3", {}, "🎯 Siz uchun tavsiyalar"), h("ul", {}, recs)),
+    scores && h("details", { class: "card my-scores", open: true },
+      h("summary", {}, h("b", {}, "📒 Mening ballarim — mustaqil ish va amaliy mashg'ulotlar")),
+      scoreTable(scores),
+      h("p", { class: "muted small" }, "Ball 20 ballik shkalada: mustaqil ishlar — barcha topshiriqlar baholari bo'yicha, amaliy — har mavzudagi eng yaxshi natija bo'yicha (o'qituvchi bahosi qo'yilgan bo'lsa, o'sha olinadi). Topshirilmagan yoki baholanmagan ish 0 deb hisoblanadi.")),
     h("div", { class: "grid cols-2" }, planner(progress), journal(progress)),
     tasksSection(allTasks, subs, refresh)
   );

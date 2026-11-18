@@ -14,6 +14,7 @@ import { buildScenes } from "../lesson-player.js";
 import { bookParagraphs } from "../audiobook.js";
 import { createForm } from "./live.js";
 import { pdfButton } from "./selfstudy.js";
+import { scoreTable, num, ratingClass } from "../scores.js";
 
 const COHORTS = { experimental: "Tajriba (TG)", control: "Nazorat (NG)", unassigned: "Belgilanmagan" };
 
@@ -27,6 +28,7 @@ const GROUPS = [
 const SECTIONS = [
   { key: "practice", icon: "🤖", title: "Amaliy mashg'ulotlar (AI)", group: "class", desc: "Talabalarning amaliy mashg'ulot natijalari, AI bahosi va feedbacki; o'qituvchi bahosi va izohi.", meta: (o) => `${o.practiceReviews} ta tekshiruv${o.avgPracticeScore !== null ? ` · o'rtacha ${o.avgPracticeScore}/10` : ""}` },
   { key: "labs", icon: "🔬", title: "Laboratoriya hisobotlari", group: "class", desc: "Kompleks tahlil loyihalarini 9 mezonli 100 ballik rubrika bilan baholash.", badge: (o) => o.labs.submitted && [`${o.labs.submitted} ta yangi`, "warn"], meta: (o) => `${o.labs.graded} tasi baholangan` },
+  { key: "gradebook", icon: "📒", title: "Baholar jurnali", group: "class", desc: "Har bir talabaning mustaqil ish va amaliy mashg'ulot ballari, 20 ballik reyting, guruh bo'yicha filtr va Excel (CSV)." },
   { key: "self-study", icon: "🧩", title: "Mustaqil ishlar", group: "class", desc: "Topshiriqlarni baholash va izoh yozish.", badge: (o) => o.ungraded && [`${o.ungraded} ta baholanmagan`, "warn"], meta: (o) => `${o.selfStudySubmissions} ta topshiriq` },
   { key: "trainer", icon: "🎙", title: "Trenajyor natijalari", group: "class", desc: "AI baholagan mashg'ulotlar, suhbat yozuvlari va mezonlar.", meta: (o) => `${o.trainerSessions} ta mashg'ulot${o.avgTrainerScore !== null ? ` · o'rtacha ${o.avgTrainerScore}` : ""}` },
   { key: "students", icon: "👥", title: "Talabalar", group: "class", desc: "Ro'yxat, guruhlar, progress va parolni tiklash.", meta: (o) => `${o.students} nafar` },
@@ -53,7 +55,7 @@ const sectionHref = (key) => `#/teacher/${key}`;
 
 export async function render(el, tab = "", param) {
   const content = h("div");
-  const views = { "": overview, practice: practiceReviews, labs: labProjects, slides: slidesManager, videos: videosManager, live: (el) => mount(el, createForm()), items: itemsView, voices: voicesManager, students, trainer, "self-study": selfStudy };
+  const views = { "": overview, practice: practiceReviews, labs: labProjects, slides: slidesManager, videos: videosManager, live: (el) => mount(el, createForm()), items: itemsView, voices: voicesManager, students, trainer, "self-study": selfStudy, gradebook };
   const view = views[tab || ""];
   if (!view) throw new Error("Bo'lim topilmadi");
   const sec = SECTIONS.find((x) => x.key === tab);
@@ -773,7 +775,7 @@ async function trainer(el) {
                 {},
                 h("td", {}, fmtDate(s.createdAt)),
                 h("td", {}, s.user.name),
-                h("td", {}, s.user.group || "—"),
+                h("td", { class: "nowrap" }, s.user.group || "—"),
                 h("td", {}, s.scenarioTitle),
                 h("td", {}, h("b", { class: scoreClass(s.total) }, s.total)),
                 h("td", {}, `${Math.round(s.durationSec / 60)} daq`),
@@ -798,6 +800,78 @@ async function trainer(el) {
     out
   );
   draw();
+}
+
+// ---------------- Baholar jurnali ----------------
+
+async function gradebook(el) {
+  const d = await api.get("admin/gradebook");
+  if (!d.students.length) return mount(el, emptyState("📒", "Hali talabalar ro'yxatdan o'tmagan"));
+  const groups = [...new Set(d.students.map((s) => s.user.group).filter(Boolean))].sort();
+  const f = { group: "", q: "", sort: "name" };
+  const body = h("tbody");
+  const summary = h("p", { class: "muted small" });
+  const rowsOf = () =>
+    d.students
+      .filter((s) => (!f.group || s.user.group === f.group) && (!f.q || s.user.name.toLowerCase().includes(f.q.toLowerCase())))
+      .sort((a, b) =>
+        f.sort === "total" ? b.selfStudy.rating + b.practice.rating - (a.selfStudy.rating + a.practice.rating)
+        : f.sort === "ss" ? b.selfStudy.rating - a.selfStudy.rating
+        : f.sort === "pr" ? b.practice.rating - a.practice.rating
+        : (a.user.group || "").localeCompare(b.user.group || "") || a.user.name.localeCompare(b.user.name)
+      );
+  const draw = () => {
+    const rs = rowsOf();
+    body.replaceChildren(
+      ...rs.map((s, i) => {
+        const total = Math.round((s.selfStudy.rating + s.practice.rating) * 10) / 10;
+        return h("tr", { class: "clickable", onclick: () => studentSheet(s, d) },
+          h("td", { class: "num muted" }, i + 1),
+          h("td", {}, h("b", {}, s.user.name)),
+          h("td", {}, s.user.group || "—"),
+          h("td", { class: "num" }, `${s.selfStudy.submitted} / ${s.selfStudy.graded}`),
+          h("td", { class: "num" }, num(s.selfStudy.avg)),
+          h("td", { class: "num" }, h("b", { class: ratingClass(s.selfStudy.rating) }, num(s.selfStudy.rating))),
+          h("td", { class: "num" }, `${s.practice.done} / ${s.practice.total}`),
+          h("td", { class: "num" }, num(s.practice.avg)),
+          h("td", { class: "num" }, h("b", { class: ratingClass(s.practice.rating) }, num(s.practice.rating))),
+          h("td", { class: "num" }, h("b", {}, num(total))));
+      })
+    );
+    const avg = (k) => (rs.length ? num(Math.round((rs.reduce((n, s) => n + s[k].rating, 0) / rs.length) * 10) / 10) : "—");
+    summary.textContent = `${rs.length} nafar talaba · o'rtacha: mustaqil ish ${avg("selfStudy")} / 20, amaliy ${avg("practice")} / 20`;
+  };
+  const csv = () =>
+    downloadFile("baholar-jurnali.csv", toCSV([
+      ["№", "F.I.Sh.", "Guruh", "Mustaqil ish: topshirgan", "baholangan", "o'rtacha baho (2–5)", "ball (20)", "Amaliy: bajarilgan mavzu", "o'rtacha (/10)", "ball (20)", "Jami (40)",
+        ...TOPICS.filter((t) => t.practice).map((t) => `Amaliy ${t.num}-mavzu (/10)`)],
+      ...rowsOf().map((s, i) => [i + 1, s.user.name, s.user.group, s.selfStudy.submitted, s.selfStudy.graded, num(s.selfStudy.avg), num(s.selfStudy.rating), s.practice.done, num(s.practice.avg), num(s.practice.rating), num(Math.round((s.selfStudy.rating + s.practice.rating) * 10) / 10),
+        ...TOPICS.filter((t) => t.practice).map((t) => num(s.practice.topics[t.id]?.score))]),
+    ]));
+  draw();
+  mount(
+    el,
+    h("div", { class: "card row wrap" },
+      h("label", { class: "field" }, h("span", {}, "Guruh"), h("select", { onchange: (e) => ((f.group = e.target.value), draw()) }, h("option", { value: "" }, "Barcha guruhlar"), groups.map((g) => h("option", { value: g }, g)))),
+      h("label", { class: "field grow" }, h("span", {}, "Qidirish"), h("input", { type: "search", placeholder: "Talaba ismi…", oninput: (e) => ((f.q = e.target.value), draw()) })),
+      h("label", { class: "field" }, h("span", {}, "Tartib"), h("select", { onchange: (e) => ((f.sort = e.target.value), draw()) },
+        [["name", "Guruh va ism"], ["total", "Jami ball"], ["ss", "Mustaqil ish bali"], ["pr", "Amaliy bali"]].map(([v, t]) => h("option", { value: v }, t)))),
+      h("button", { class: "btn ghost", onclick: csv }, "⬇ Excel (CSV)")),
+    summary,
+    h("div", { class: "table-wrap card" },
+      h("table", { class: "table gradebook" },
+        h("thead", {},
+          h("tr", {}, h("th", { rowspan: 2 }, "№"), h("th", { rowspan: 2 }, "F.I.Sh."), h("th", { rowspan: 2 }, "Guruh"), h("th", { colspan: 3, class: "center" }, "🧩 Mustaqil ish"), h("th", { colspan: 3, class: "center" }, "🧮 Amaliy mashg'ulot"), h("th", { rowspan: 2 }, "Jami (40)")),
+          h("tr", {}, h("th", {}, "Topshirgan / baholangan"), h("th", {}, "O'rtacha baho"), h("th", {}, "Ball (20)"), h("th", {}, "Bajarilgan mavzu"), h("th", {}, "O'rtacha (/10)"), h("th", {}, "Ball (20)"))),
+        body)),
+    h("p", { class: "muted small" },
+      `Hisoblash: mustaqil ish bali = baholar yig'indisi ÷ (5 × ${d.selfStudyTasks} ta topshiriq) × 20; amaliy bali = har mavzudagi eng yaxshi natija (o'qituvchi bahosi bo'lsa — o'sha) yig'indisi ÷ (10 × ${d.practiceTopics} ta mavzu) × 20. Topshirilmagan yoki baholanmagan ish 0 deb olinadi. Batafsil ko'rish uchun talaba qatorini bosing.`)
+  );
+}
+
+/** Bitta talabaning mavzular bo'yicha ballari (o'qituvchi uchun modal oyna). */
+function studentSheet(s, d) {
+  modal(`📒 ${s.user.name}${s.user.group ? ` · ${s.user.group}` : ""}`, scoreTable(s), { wide: true });
 }
 
 // ---------------- Mustaqil ishlar ----------------

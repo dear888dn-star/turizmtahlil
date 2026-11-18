@@ -146,3 +146,12 @@ body.qr-mode { background: #fff; }
   .qr-side { max-width: none; }
   .qr-steps { display: inline-block; text-align: left; }
 }
+
+/* ---------- Baholar jurnali ---------- */
+.gradebook th { white-space: nowrap; font-size: 0.8rem; }
+.gradebook th.center { text-align: center; }
+.gradebook td.num { text-align: center; }
+.gradebook tr.clickable { cursor: pointer; }
+.gradebook tr.clickable:hover td { background: var(--primary-soft); }
+.my-scores .stat-card b { font-size: 1.6rem; }
+.gradebook td.nowrap { white-space: nowrap; }
