@@ -37,7 +37,7 @@ So'ng saytda **Ro'yxatdan o'tish → O'qituvchi** ni tanlab, `TEACHER_CODE` bila
 
 ## 3. R2 fayl ombori (ixtiyoriy)
 
-R2 shart emas: AI ovozlari va o'qituvchi yuklagan fayllar R2 bo'lmasa D1 bazasida saqlanadi (5 GB gacha bepul). R2 faqat ko'p hajmli videolar yuklanadigan bo'lsa kerak bo'ladi.
+R2 shart emas: AI ovozlari va o'qituvchi yuklagan fayllar R2 bo'lmasa D1 bazasida saqlanadi (bepul tarifda bitta baza 500 MB; AI ovozlari uchun avtomatik 150 MB chegara bor). R2 faqat ko'p hajmli videolar yuklanadigan bo'lsa kerak bo'ladi.
 
 18 ta dars taqdimoti platformaga o'rnatilgan, ular R2'siz ham ishlaydi.
 
@@ -60,7 +60,7 @@ Yoqish uchun:
   - reyting va o'qituvchi paneli barcha ma'lumotni bir necha umumiy so'rov bilan oladi.
 
   Agar baribir "Exceeded CPU limit" xatosi chiqsa, `server/auth.mjs` faylidagi `PBKDF2_ITER` qiymatini kamaytiring.
-- **D1: 5 GB, R2: 10 GB** (bepul).
+- **D1: bitta baza 500 MB, R2: 10 GB** (bepul). R2 ulanmagan bo'lsa, AI ovozlari ham D1 da saqlanadi. Ular uchun 150 MB chegara qo'yilgan (`TTS_CACHE_MB` bilan o'zgartiriladi): chegaradan oshsa yoki baza to'lsa, eng eski audiolar avtomatik o'chiriladi. Shunda talabalar ma'lumotlari va baholar doim saqlanadi. Ombor holati: O'qituvchi paneli → AI ovozlar → «Ma'lumotlar ombori».
 
 ## Netlify (zaxira versiya)
 

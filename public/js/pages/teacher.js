@@ -13,6 +13,7 @@ import { audioUrl, audioInfo, chunkText, ttsInfo, resetTtsInfo } from "../narrat
 import { buildScenes } from "../lesson-player.js";
 import { bookParagraphs } from "../audiobook.js";
 import { createForm } from "./live.js";
+import { pdfButton } from "./selfstudy.js";
 
 const COHORTS = { experimental: "Tajriba (TG)", control: "Nazorat (NG)", unassigned: "Belgilanmagan" };
 
@@ -373,7 +374,7 @@ async function voicesManager(el) {
   const st = await api.get("admin/tts");
   const fmtMin = (sec) => `${Math.floor(sec / 60)} daq ${Math.round(sec % 60)} s`;
   if (!st.enabled) {
-    mount(el, h("div", { class: "alert alert-warn" }, h("b", {}, "AI ovozi o'chiq. "), "Cloudflare (yoki Netlify) sozlamalarida GEMINI_API_KEY kalitini qo'shing — shundan keyin trenajyor, animatsion darslar va audiokitob o'zbek tilida tabiiy AI ovozida gapiradi."));
+    mount(el, storageCard(), h("div", { class: "alert alert-warn" }, h("b", {}, "AI ovozi o'chiq. "), "Cloudflare (yoki Netlify) sozlamalarida GEMINI_API_KEY kalitini qo'shing — shundan keyin trenajyor, animatsion darslar va audiokitob o'zbek tilida tabiiy AI ovozida gapiradi."));
     return;
   }
   let voice = st.defaultVoice;
@@ -466,6 +467,7 @@ async function voicesManager(el) {
 
   mount(
     el,
+    storageCard(),
     h("div", { class: "grid cols-4" },
       h("div", { class: "card stat-card" }, h("div", { class: "stat-icon" }, "🔊"), h("b", {}, "Yoqilgan"), h("span", { class: "muted small" }, `Model: ${st.models[0] || "—"}`)),
       h("div", { class: "card stat-card" }, h("div", { class: "stat-icon" }, "💾"), h("b", {}, st.cached), h("span", { class: "muted small" }, "keshdagi audio")),
@@ -503,6 +505,25 @@ async function voicesManager(el) {
       log)
   );
 }
+
+/** Ma'lumotlar ombori: band hajm (bepul D1 — 500 MB) va uni nima egallagani. */
+function storageCard() {
+  const box = h("div", { class: "card stack" }, h("h3", {}, "💾 Ma'lumotlar ombori"), h("p", { class: "muted small" }, "Hisoblanmoqda…"));
+  const mb = (b) => `${(b / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+  api.get("admin/storage").then((d) => {
+    if (!d.supported) return box.remove();
+    const pct = Math.min(100, Math.round((d.total / d.limit) * 100));
+    box.replaceChildren(
+      h("h3", {}, "💾 Ma'lumotlar ombori"),
+      h("div", { class: "row between wrap" }, h("b", {}, `${mb(d.total)} / ${mb(d.limit)} band (${pct}%)`), h("span", { class: "muted small" }, `AI ovozlari uchun chegara: ${mb(d.ttsBudget)} — oshsa, eng eski audiolar avtomatik o'chiriladi`)),
+      progressBarEl(pct),
+      pct < 85 ? "" : h("div", { class: "alert alert-warn" }, "Ombor to'lishiga oz qoldi. Talabalar ma'lumotlari saqlanishi uchun AI ovozlarini o'chiring (pastdagi «🗑 Eski ovozlarni o'chirish») yoki katta video/taqdimotlarni YouTube / Google Drive havolasi bilan almashtiring."),
+      h("table", { class: "table small" }, h("tbody", {}, d.groups.map((g) => h("tr", {}, h("td", {}, g.name), h("td", { class: "num" }, mb(g.bytes)), h("td", { class: "num muted" }, `${g.rows} yozuv`)))))
+    );
+  }).catch(() => box.remove());
+  return box;
+}
+const progressBarEl = (pct) => h("div", { class: "progress" }, h("div", { class: "progress-fill", style: { width: `${pct}%`, background: pct >= 85 ? "#dc2626" : pct >= 60 ? "#d97706" : undefined } }));
 
 // ---------------- Video darslar ----------------
 
@@ -788,7 +809,9 @@ async function selfStudy(el) {
   const list = h("div", { class: "stack" });
   const draw = () => {
     const rs = items.filter((i) => !onlyPending || i.grade == null || i.resubmitted);
+    const banner = pendingBanner(items, draw);
     list.replaceChildren(
+      ...(banner ? [banner] : []),
       ...rs.map((it) =>
         h(
           "div",
@@ -802,13 +825,65 @@ async function selfStudy(el) {
     );
     if (!rs.length) list.append(emptyState("✅", "Barcha ishlar baholangan"));
   };
-  mount(el, h("label", { class: "check" }, h("input", { type: "checkbox", checked: true, onchange: (e) => ((onlyPending = e.target.checked), draw()) }), "Faqat baholanmaganlarni ko'rsatish"), list);
+  // Talaba bo'yicha PDF: shu talabaning barcha topshirgan ishlari (titul, mundarija, baho va izohlar)
+  const students = [...new Map(items.map((i) => [i.userId, i.user])).entries()].sort((a, b) => (a[1].name || "").localeCompare(b[1].name || ""));
+  const pick = h("select", {}, students.map(([id, u]) => h("option", { value: id }, `${u.name}${u.group ? ` (${u.group})` : ""}`)));
+  const pdf = h("div", { class: "card row wrap" },
+    h("b", {}, "📄 Talabaning mustaqil ishlari (PDF):"),
+    h("label", { class: "field grow" }, pick),
+    pdfButton(() => students.find(([id]) => id === pick.value)?.[1] || {}, () => items.filter((i) => i.userId === pick.value), "PDF yuklab olish"));
+  mount(el, pdf, h("label", { class: "check" }, h("input", { type: "checkbox", checked: true, onchange: (e) => ((onlyPending = e.target.checked), draw()) }), "Faqat baholanmaganlarni ko'rsatish"), list);
   draw();
 }
 
+// Saqlanmagan baholar (masalan, server xatosi paytida) shu brauzerda saqlanib turadi va keyin qayta yuboriladi.
+const PENDING_KEY = "tt.pendingGrades";
+const readPending = () => {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+const writePending = (p) => {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+  } catch {}
+};
+
+function pendingBanner(items, redraw) {
+  const pend = readPending();
+  const keys = Object.keys(pend);
+  if (!keys.length) return null;
+  const btn = h("button", { class: "btn" }, `↻ Qayta yuborish (${keys.length})`);
+  btn.onclick = async () => {
+    btn.disabled = true;
+    let ok = 0;
+    let lastErr = null;
+    for (const k of keys) {
+      const g = pend[k];
+      try {
+        const res = await api.put(`admin/self-study/${g.userId}/${g.taskId}`, { grade: g.grade, feedback: g.feedback });
+        const it = items.find((x) => x.userId === g.userId && x.taskId === g.taskId);
+        if (it) Object.assign(it, res);
+        delete pend[k];
+        ok++;
+      } catch (e) {
+        lastErr = e;
+        if (e.status && e.status !== 507 && e.status < 500) delete pend[k]; // masalan, ish o'chirilgan
+      }
+    }
+    writePending(pend);
+    toast(lastErr && Object.keys(pend).length ? `${ok} ta baho saqlandi, ${Object.keys(pend).length} tasi hali saqlanmadi: ${lastErr.message}` : `${ok} ta baho saqlandi`, lastErr ? "warn" : "ok");
+    redraw();
+  };
+  return h("div", { class: "alert alert-warn row between wrap" }, h("span", {}, `⚠️ ${keys.length} ta baho serverga saqlanmagan (shu brauzerda saqlanib turibdi).`), btn);
+}
+
 function gradeForm(it, redraw) {
-  const grade = h("select", {}, [5, 4, 3, 2].map((g) => h("option", { value: g, selected: it.grade === g }, g)));
-  const fb = h("textarea", { rows: 2, placeholder: "Talabaga izoh va tavsiyalar" }, it.feedback || "");
+  const draft = readPending()[`${it.userId}/${it.taskId}`];
+  const grade = h("select", {}, [5, 4, 3, 2].map((g) => h("option", { value: g, selected: (draft?.grade ?? it.grade) === g }, g)));
+  const fb = h("textarea", { rows: 2, placeholder: "Talabaga izoh va tavsiyalar" }, draft?.feedback ?? it.feedback ?? "");
   return h(
     "div",
     { class: "row wrap grade-form" },
@@ -818,10 +893,18 @@ function gradeForm(it, redraw) {
       try {
         const res = await api.put(`admin/self-study/${it.userId}/${it.taskId}`, { grade: Number(grade.value), feedback: fb.value });
         Object.assign(it, res);
+        const pend = readPending();
+        delete pend[`${it.userId}/${it.taskId}`];
+        writePending(pend);
         toast("Baho saqlandi", "ok");
         redraw();
       } catch (ex) {
-        toast(ex.message, "error");
+        // Baho yo'qolmasin: brauzerda saqlab qo'yamiz, keyin "Qayta yuborish" bilan jo'natiladi
+        const pend = readPending();
+        pend[`${it.userId}/${it.taskId}`] = { userId: it.userId, taskId: it.taskId, grade: Number(grade.value), feedback: fb.value, at: Date.now() };
+        writePending(pend);
+        toast(`${ex.message} — baho shu brauzerda saqlab qo'yildi, keyinroq «Qayta yuborish» tugmasini bosing.`, "error");
+        redraw();
       }
     } }, "Baholash")
   );

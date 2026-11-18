@@ -10,6 +10,9 @@ import { updatesFor } from "./updates.js";
 
 export const COURSE = {
   title: "Turistik korxonalar faoliyati tahlili",
+  // Fan o'qituvchisi va shahar — mustaqil ishlar PDF hujjatining titul varag'i uchun
+  teacher: "D.R.Najmiddinov",
+  city: "Jizzax",
   audience: "61010400 – Turizm (faoliyat yo'nalishlari bo'yicha) bakalavriat talabalari uchun",
   source: "A.N. Xoliqulov. “Turistik korxonalar faoliyati tahlili”. O'quv qo'llanma. Samarqand: STEP-SEL, 2024.",
   program: "O'zMU Jizzax filiali, “Iqtisodiyot va turizm” kafedrasi. Fan kodi TKFT1706, VII semestr, 6 kredit: ma'ruza 44 soat, amaliy 46 soat, mustaqil ta'lim 90 soat.",
