@@ -4,6 +4,7 @@
 // (kalit so'zlar, hajm, raqamlardan foydalanish) taxminiy baho va tavsiyalar beriladi.
 import { TOPICS } from "../public/data/topics.js";
 import { checkField, parseNum } from "../public/data/practice.js";
+import { practiceFor } from "../public/data/practice-variants.js";
 
 export const REVIEW_CRITERIA = [
   { key: "formulas", name: "Formulalar va ko'rsatkichlarni to'g'ri qo'llash", max: 3 },
@@ -30,10 +31,12 @@ export const REVIEW_SCHEMA = {
 const clip = (s, n) => String(s ?? "").slice(0, n);
 
 /** Talaba yuborgan ma'lumotlarni tozalash va hisob-kitoblarni serverda qayta tekshirish. */
-export function normalizeSubmission(topicId, raw = {}) {
+/** seed — talaba identifikatori: javoblar shu talabaning variantidagi raqamlar bo'yicha tekshiriladi. */
+export function normalizeSubmission(topicId, raw = {}, seed = null) {
   const topic = TOPICS.find((t) => t.id === topicId);
   if (!topic?.practice) return null;
-  const tasks = topic.practice.tasks.map((task) => {
+  const pr = practiceFor(topic.num, seed) || topic.practice;
+  const tasks = pr.tasks.map((task) => {
     const given = raw.tasks?.[task.id] || {};
     const fields = task.fields.map((f, i) => {
       const value = clip(given.values?.[i], 40);
@@ -42,7 +45,7 @@ export function normalizeSubmission(topicId, raw = {}) {
     return { id: task.id, title: task.title, text: task.text, formula: task.formula, solution: task.solution, work: clip(given.work, 1500), fields, attempted: fields.some((f) => f.given !== ""), ok: fields.every((f) => f.ok) };
   });
   const open = (topic.practice.open || []).map((q, i) => ({ q, answer: clip(raw.open?.[i], 3000) }));
-  return { topic, tasks, open, conclusion: clip(raw.conclusion, 3000) };
+  return { topic, tasks, open, conclusion: clip(raw.conclusion, 3000), variant: pr.variant || null };
 }
 
 export function reviewPrompt(sub) {
@@ -56,7 +59,8 @@ export function reviewPrompt(sub) {
   const openText = sub.open.map((o, i) => `${i + 1}) Topshiriq: ${o.q}\n   Talaba javobi: ${o.answer || "(bo'sh)"}`).join("\n");
   return `Sen "Turistik korxonalar faoliyati tahlili" fanidan amaliy mashg'ulotlarni tekshiruvchi tajribali o'qituvchisan (OTM, 61010400 – Turizm yo'nalishi, 4-kurs). Talabaning ${topic.num}-mavzu bo'yicha amaliy ishini tekshir va unga foydali, aniq feedback ber.
 
-Mavzu: ${topic.num}. ${topic.title}
+Mavzu: ${topic.num}. ${topic.title}${sub.variant ? `
+Talabaning shaxsiy varianti: № ${sub.variant} (raqamlar boshqa talabalarnikidan farq qiladi; quyidagi to'g'ri javoblar aynan shu variant uchun hisoblangan)` : ""}
 Mashg'ulot maqsadi: ${topic.practice.goal}
 Tayanch tushunchalar: ${topic.practice.concepts.join(", ")}
 

@@ -5,7 +5,8 @@
   "description": "Turistik korxonalar faoliyati tahlili fani bo'yicha interaktiv ta'lim platformasi: amaliy mashg'ulotlar, AI tekshiruv, tahlil laboratoriyasi va trenajyor",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-server.mjs"
+    "dev": "node scripts/dev-server.mjs",
+    "check:variants": "node scripts/check-variants.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -4,12 +4,26 @@ import { h, toast, fmtDate } from "./ui.js";
 import { api, session } from "./api.js";
 import { topicState, updateTopic } from "./progress.js";
 import { checkField } from "../data/practice.js";
+import { practiceFor, fmt } from "../data/practice-variants.js";
 import { confetti, shake } from "./motion.js";
 
 const changed = () => window.dispatchEvent(new Event("vgt:progress"));
 
+/** Variant uchun seed: tizimga kirgan foydalanuvchi identifikatori (mehmon uchun — shu brauzerdagi tasodifiy kod). */
+export function practiceSeed() {
+  if (session.user?.id) return session.user.id;
+  try {
+    let g = localStorage.getItem("tt.guestSeed");
+    if (!g) localStorage.setItem("tt.guestSeed", (g = `guest-${Math.random().toString(36).slice(2)}`));
+    return g;
+  } catch {
+    return "guest";
+  }
+}
+
 export function practicePanel(topic) {
-  const pr = topic.practice;
+  const sample = topic.practice; // asl masalalar — namuna (yechimi bilan)
+  const pr = practiceFor(topic.num, practiceSeed()) || sample; // talabaning o'z varianti
   const st = topicState(topic.id);
   st.practice ||= {};
   const draft = (st.practiceDraft ||= { open: [], conclusion: "" });
@@ -23,7 +37,7 @@ export function practicePanel(topic) {
   };
   drawSummary();
 
-  const taskCards = pr.tasks.map((task, idx) => taskCard(topic, task, idx, st, drawSummary));
+  const taskCards = pr.tasks.map((task, idx) => taskCard(topic, task, idx, st, drawSummary, sample.tasks.find((t) => t.id === task.id)));
 
   const openBoxes = (pr.open || []).map((q, i) => {
     const ta = h("textarea", { rows: 5, placeholder: "Javobingizni yozing: raqamlarga tayaning, sabab va taklifni ko'rsating..." }, draft.open[i] || "");
@@ -78,6 +92,17 @@ export function practicePanel(topic) {
       h("p", {}, pr.goal),
       h("div", { class: "chips" }, pr.concepts.map((c) => h("span", { class: "chip chip-soft" }, c))),
       h("p", { class: "muted small" }, `Asosiy manba: A.N. Xoliqulov, “Turistik korxonalar faoliyati tahlili”, 2024, ${pr.source}. Shartli raqamlar dars mashqi uchun tuzilgan.`)),
+    pr.variant && h("div", { class: "card variant-card" },
+      h("div", { class: "variant-no" }, h("small", {}, "Variant"), h("b", {}, `№ ${pr.variant}`)),
+      h("div", {},
+        h("h3", {}, "🧑‍🎓 Sizning shaxsiy variantingiz"),
+        h("p", { class: "small" }, "Har bir talabaga masalalar sharti bir xil, raqamlari esa boshqacha beriladi — javoblarni boshqa talabadan ko'chirib bo'lmaydi. Ishlash tartibi:"),
+        h("ol", { class: "small variant-steps" },
+          h("li", {}, h("b", {}, "📘 Namuna"), " blokini oching: shu turdagi masala formula va bosqichma-bosqich yechimi bilan berilgan."),
+          h("li", {}, "Xuddi shu usulda ", h("b", {}, "o'z variantingiz"), " raqamlari bilan hisoblang va javobni kiriting."),
+          h("li", {}, "“Tekshirish” — javob darhol tekshiriladi; to'g'ri yechganingizdan keyin o'z variantingiz yechimi ham ochiladi."),
+          h("li", {}, "Keys va xulosani yozib, ", h("b", {}, "🤖 AI tekshiruvi"), " orqali 10 ballik baho oling.")),
+        !session.user && h("p", { class: "muted small" }, "Siz mehmon sifatida ishlayapsiz: variant shu brauzerga biriktirilgan. Tizimga kirsangiz, variant profilingizga biriktiriladi."))),
     summary,
     taskCards,
     openBoxes.length > 0 && h("h3", { class: "practice-sub" }, "📁 Keys va tahliliy topshiriqlar"),
@@ -92,13 +117,28 @@ export function practicePanel(topic) {
   );
 }
 
-function taskCard(topic, task, idx, st, onChange) {
+/** Namuna: asl masala, formula, bosqichma-bosqich yechim va javoblar. */
+function sampleBlock(ex) {
+  if (!ex) return null;
+  return h("details", { class: "sample" },
+    h("summary", {}, "📘 Namuna: shu turdagi masala va uning yechimi"),
+    h("p", {}, ex.text),
+    ex.formula && h("div", { class: "formula" }, "ƒ ", ex.formula),
+    h("p", {}, h("b", {}, "Yechish: "), ex.solution),
+    h("p", { class: "small" }, h("b", {}, "Javob: "), ex.fields.map((f, i) => [i ? "; " : "", `${f.label} = ${fmt(f.value, 4)}${f.unit ? ` ${f.unit}` : ""}`])),
+    ex.note && h("p", { class: "alert alert-warn small" }, "⚠️ ", ex.note));
+}
+
+function taskCard(topic, task, idx, st, onChange, example) {
+  const isVariant = example && example.text !== task.text;
   const saved = st.practice[task.id] || {};
   const inputs = task.fields.map((f, i) => h("input", { type: "text", inputmode: "decimal", class: "num-input", value: saved.values?.[i] ?? "", "aria-label": f.label, placeholder: "javob" }));
   const marks = task.fields.map(() => h("span", { class: "field-mark" }));
   const work = h("textarea", { rows: 2, placeholder: "Yechim yo'li (ixtiyoriy, AI tekshiruvi uchun foydali): formulalar va oraliq hisoblar..." }, saved.work || "");
-  const solution = h("details", { class: "solution" }, h("summary", {}, "💡 Yechimni ko'rish"), h("p", {}, task.solution), task.note && h("p", { class: "alert alert-warn small" }, "⚠️ ", task.note));
-  if (!saved.tries) solution.classList.add("locked");
+  // O'z variantining yechimi faqat to'g'ri yechilgandan keyin ochiladi (ko'chirishga imkon bermaslik uchun)
+  const solution = h("details", { class: `solution ${isVariant ? "var" : ""}` }, h("summary", {}, isVariant ? "💡 Mening yechimim (tekshiruv)" : "💡 Yechimni ko'rish"), h("p", {}, task.solution), task.note && h("p", { class: "alert alert-warn small" }, "⚠️ ", task.note));
+  const lockSolution = () => solution.classList.toggle("locked", isVariant ? !topicState(topic.id).practice?.[task.id]?.okVariant : !topicState(topic.id).practice?.[task.id]?.tries);
+  lockSolution();
   const status = h("span", { class: `badge ${saved.ok ? "badge-ok" : ""}` }, saved.ok ? "✓ To'g'ri" : saved.tries ? `Urinishlar: ${saved.tries}` : "Bajarilmagan");
   const persist = (patch) =>
     updateTopic(topic.id, (s) => {
@@ -110,6 +150,8 @@ function taskCard(topic, task, idx, st, onChange) {
     "article",
     { class: `card practice-task ${saved.ok ? "ok" : ""}` },
     h("div", { class: "row between wrap" }, h("h4", {}, `${idx + 1}. ${task.title}`), status),
+    isVariant && sampleBlock(example),
+    isVariant && h("div", { class: "variant-label" }, "✍️ Sizning variantingiz"),
     h("p", {}, task.text),
     task.formula && h("div", { class: "formula" }, "ƒ ", task.formula),
     h("div", { class: "field-grid" }, task.fields.map((f, i) => h("label", { class: "field-row" }, h("span", { class: "field-label" }, f.label), h("span", { class: "field-input" }, inputs[i], f.unit && h("span", { class: "unit" }, f.unit), marks[i])))),
@@ -126,15 +168,16 @@ function taskCard(topic, task, idx, st, onChange) {
         const ok = results.every(Boolean);
         const tries = (topicState(topic.id).practice?.[task.id]?.tries || 0) + 1;
         const wasOk = topicState(topic.id).practice?.[task.id]?.ok;
-        persist({ values, ok: ok || Boolean(wasOk), tries, at: new Date().toISOString() });
+        const prevVar = topicState(topic.id).practice?.[task.id]?.okVariant;
+        persist({ values, ok: ok || Boolean(wasOk), okVariant: ok || Boolean(prevVar), variant: isVariant || undefined, tries, at: new Date().toISOString() });
         status.textContent = ok || wasOk ? "✓ To'g'ri" : `Urinishlar: ${tries}`;
         status.className = `badge ${ok || wasOk ? "badge-ok" : ""}`;
         card.classList.toggle("ok", ok || Boolean(wasOk));
-        solution.classList.remove("locked");
+        lockSolution();
         if (ok) toast(wasOk ? "To'g'ri!" : "To'g'ri! +10 XP", "ok");
         else {
           shake(card);
-          toast(`${results.filter(Boolean).length}/${results.length} ta javob to'g'ri. Formulani va o'lchov birligini tekshiring.`, "warn");
+          toast(`${results.filter(Boolean).length}/${results.length} ta javob to'g'ri. ${isVariant ? "Namunadagi yechim bosqichlarini o'z raqamlaringiz bilan takrorlang" : "Formulani va o'lchov birligini tekshiring"}.`, "warn");
         }
         changed();
         onChange();

@@ -15,6 +15,7 @@ import { bookParagraphs } from "../audiobook.js";
 import { createForm } from "./live.js";
 import { pdfButton } from "./selfstudy.js";
 import { scoreTable, num, ratingClass } from "../scores.js";
+import { practiceFor, fmt as fmtV } from "../../data/practice-variants.js";
 
 const COHORTS = { experimental: "Tajriba (TG)", control: "Nazorat (NG)", unassigned: "Belgilanmagan" };
 
@@ -1027,7 +1028,7 @@ async function practiceReviews(el) {
         h("thead", {}, h("tr", {}, ["Sana", "Talaba", "Guruh", "Mavzu", "Hisob-kitob", "AI baho", "O'qituvchi", ""].map((t) => h("th", {}, t)))),
         h("tbody", {}, rs.map((r) => {
           const t = TOPICS.find((x) => x.id === r.topicId);
-          return h("tr", {}, h("td", {}, fmtDate(r.createdAt)), h("td", {}, r.user?.name), h("td", {}, r.user?.group || "—"), h("td", {}, `${t?.num}. ${t?.title}`), h("td", {}, `${r.calc.correct}/${r.calc.total}`), h("td", {}, h("b", {}, `${r.total}/10`), r.ai ? " 🤖" : " ~"), h("td", {}, r.teacher ? `${r.teacher.grade ?? "—"}/10` : "—"), h("td", {}, h("button", { class: "btn small", onclick: () => practiceModal(r, criteria, () => practiceReviews(el)) }, "Ko'rish")));
+          return h("tr", {}, h("td", {}, fmtDate(r.createdAt)), h("td", {}, r.user?.name), h("td", {}, r.user?.group || "—"), h("td", {}, `${t?.num}. ${t?.title}`, r.variant ? h("div", { class: "muted small" }, `variant № ${r.variant}`) : ""), h("td", {}, `${r.calc.correct}/${r.calc.total}`), h("td", {}, h("b", {}, `${r.total}/10`), r.ai ? " 🤖" : " ~"), h("td", {}, r.teacher ? `${r.teacher.grade ?? "—"}/10` : "—"), h("td", {}, h("button", { class: "btn small", onclick: () => practiceModal(r, criteria, () => practiceReviews(el)) }, "Ko'rish")));
         })))),
       h("div", { class: "row end" }, h("button", { class: "btn ghost", onclick: () => downloadFile("amaliy-mashgulotlar-ai.csv", toCSV([["Sana", "Talaba", "Guruh", "Mavzu", "To'g'ri hisob-kitob", "Jami hisob-kitob", ...criteria.map((c) => `${c.name} (${c.max})`), "AI baho (10)", "AI", "O'qituvchi bahosi", "O'qituvchi izohi"], ...rs.map((r) => [r.createdAt.slice(0, 10), r.user?.name, r.user?.group, TOPICS.find((x) => x.id === r.topicId)?.num, r.calc.correct, r.calc.total, ...criteria.map((c) => r.review.scores?.[c.key] ?? ""), r.total, r.ai ? "ha" : "taxminiy", r.teacher?.grade ?? "", r.teacher?.comment ?? ""])])) }, "⬇ CSV (Excel)"))
     );
@@ -1041,10 +1042,15 @@ function practiceModal(r, criteria, reload) {
   const t = TOPICS.find((x) => x.id === r.topicId);
   const grade = h("input", { type: "number", min: 0, max: 10, step: 0.5, class: "w-xs", value: r.teacher?.grade ?? r.total });
   const comment = h("textarea", { rows: 3, placeholder: "Talabaga izoh (u amaliy mashg'ulot sahifasida ko'rinadi)" }, r.teacher?.comment || "");
-  const answers = h("details", {}, h("summary", {}, h("b", {}, "Talaba javoblari")),
-    h("ol", { class: "small" }, (t?.practice?.tasks || []).map((task) => {
+  // Talabaning shaxsiy varianti (raqamlari va to'g'ri javoblari) — tekshirish uchun
+  const vpr = (r.variant && practiceFor(t?.num, r.userId)) || t?.practice;
+  const answers = h("details", {}, h("summary", {}, h("b", {}, `Talaba javoblari${r.variant ? ` (variant № ${r.variant})` : ""}`)),
+    h("ol", { class: "small" }, (vpr?.tasks || []).map((task) => {
       const a = r.answers?.tasks?.find((x) => x.id === task.id);
-      return h("li", {}, h("b", {}, task.title), ": ", a?.values?.filter(Boolean).join(" · ") || "—", a?.ok ? " ✓" : a?.values?.some(Boolean) ? " ✗" : "", a?.work && h("div", { class: "muted" }, "Yechim yo'li: ", a.work));
+      return h("li", {}, h("b", {}, task.title), ": ", a?.values?.filter(Boolean).join(" · ") || "—", a?.ok ? " ✓" : a?.values?.some(Boolean) ? " ✗" : "",
+        h("div", { class: "muted" }, "Shart: ", task.text),
+        h("div", { class: "muted" }, "To'g'ri javob: ", task.fields.map((f) => `${fmtV(f.value, 3)}${f.unit ? ` ${f.unit}` : ""}`).join(" · ")),
+        a?.work && h("div", { class: "muted" }, "Yechim yo'li: ", a.work));
     })),
     (t?.practice?.open || []).map((q, i) => h("div", { class: "small" }, h("b", {}, `K${i + 1}. ${q}`), h("p", {}, r.answers?.open?.[i] || "—"))),
     r.answers?.conclusion && h("div", { class: "small" }, h("b", {}, "Xulosa: "), r.answers.conclusion));
