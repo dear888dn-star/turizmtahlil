@@ -638,7 +638,7 @@ async function practiceReview(req, topicId) {
   const user = await requireUser(req);
   const b = await body(req);
   if (JSON.stringify(b).length > 60_000) throw new HttpError(413, "Javoblar hajmi juda katta");
-  const sub = normalizeSubmission(topicId, b);
+  const sub = normalizeSubmission(topicId, b, user.id);
   if (!sub) throw new HttpError(404, "Bu mavzu uchun amaliy mashg'ulot topilmadi");
   const filled = sub.tasks.some((t) => t.attempted) || sub.open.some((o) => o.answer.trim().length >= 20) || sub.conclusion.trim().length >= 20;
   if (!filled) throw new HttpError(400, "Tekshirish uchun kamida bitta hisob-kitob yoki ochiq topshiriqni bajaring");
@@ -674,6 +674,7 @@ async function practiceReview(req, topicId) {
     topicId,
     total: totalOf(review.scores),
     max: 10,
+    variant: sub.variant,
     calc,
     review,
     answers: { tasks: sub.tasks.map((t) => ({ id: t.id, values: t.fields.map((f) => f.given), work: t.work, ok: t.ok })), open: sub.open.map((o) => o.answer), conclusion: sub.conclusion },

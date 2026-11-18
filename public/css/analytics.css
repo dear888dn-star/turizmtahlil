@@ -155,3 +155,18 @@ body.qr-mode { background: #fff; }
 .gradebook tr.clickable:hover td { background: var(--primary-soft); }
 .my-scores .stat-card b { font-size: 1.6rem; }
 .gradebook td.nowrap { white-space: nowrap; }
+
+/* ---------- Amaliy mashg'ulot: namuna va shaxsiy variant ---------- */
+.solution.locked.var summary::after { content: " (to'g'ri yechgandan keyin ochiladi)"; }
+.variant-card { display: flex; gap: 18px; align-items: flex-start; border-left: 4px solid var(--primary); }
+.variant-no { flex: none; display: grid; place-items: center; min-width: 86px; padding: 10px 12px; border-radius: 14px; background: var(--primary-soft); color: var(--primary); text-align: center; }
+.variant-no small { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.variant-no b { font-size: 1.5rem; line-height: 1.1; }
+.variant-steps { margin: 6px 0 0; padding-left: 1.2em; }
+.variant-steps li { margin: 2px 0; }
+.sample { margin: 8px 0 12px; padding: 10px 14px; border-radius: 12px; background: var(--surface-2); border: 1px dashed var(--border); }
+.sample > summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.sample[open] > summary { margin-bottom: 8px; }
+.sample p { margin: 6px 0; }
+.variant-label { display: inline-block; margin-top: 4px; padding: 3px 10px; border-radius: 99px; background: var(--primary); color: var(--primary-ink); font-size: 0.8rem; font-weight: 700; }
+@media (max-width: 600px) { .variant-card { flex-direction: column; } }
