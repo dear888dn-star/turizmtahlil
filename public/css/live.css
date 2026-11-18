@@ -190,3 +190,17 @@ tr.ia-critical > td { background: color-mix(in srgb, var(--err-soft) 60%, transp
 .wc-mine { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 10px 0; }
 .wc-mine span { padding: 8px 14px; border-radius: 99px; background: rgba(255, 255, 255, 0.14); font-weight: 700; font-size: 1.1rem; animation: wcPop 0.6s cubic-bezier(.3,1.6,.5,1) both; }
 @media (max-width: 760px) { .wc-top { flex-direction: column; } .wc-host { padding: 18px; } }
+
+/* Mavzu tanlash (o'yin yaratish) */
+.live-topic-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 8px; }
+.live-topic-pick .live-topic { justify-content: flex-start; text-align: left; white-space: normal; line-height: 1.3; padding: 8px 12px; border-radius: 12px; }
+.live-topic-pick .live-topic small { opacity: 0.7; }
+.live-topic-pick .live-topic.active { box-shadow: 0 0 0 2px var(--primary) inset; }
+.live-pick-info { margin-top: 10px; font-size: 0.92rem; }
+.live-pick-info .warn-text { color: var(--warn); font-weight: 600; }
+.lh-topics { opacity: 0.85; font-size: clamp(0.9rem, 1.6vw, 1.2rem); margin: 4px 0 10px; }
+.lh-topic { opacity: 0.8; font-weight: 500; }
+.lh-q.long { font-size: clamp(1.05rem, 2vw, 1.65rem); }
+.lh-opt span:last-child { overflow-wrap: anywhere; }
+.live-topic-pick .live-topic { display: block; }
+.live-topic-pick .live-topic small { white-space: nowrap; }
