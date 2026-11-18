@@ -906,12 +906,50 @@ async function ttsSpeak(req) {
     await db().setBinary(ttsBinKey(key), out.audio);
     await db().set(ttsMetaKey(key), { seconds: Math.round(out.seconds * 10) / 10, model: out.model, format: out.format, voice, style, chars: text.length, bytes: out.audio.length, createdAt: new Date().toISOString() });
     await db().set(qKey, { n: used + 1 });
+    await keepTtsBudget(out.audio.length).catch((e) => console.error("TTS kesh chegarasi:", e));
     return json({ url: ttsUrl(key, out.format), cached: false, seconds: out.seconds });
   } catch (err) {
     const status = err.status === 429 ? 429 : err.status === 503 ? 503 : 502;
     await db().set("meta/tts-last-error", { at: new Date().toISOString(), status, message: err.message, detail: err.detail || "", quotaId: err.quotaId || "", daily: Boolean(err.daily), model: err.model || "" }).catch(() => {});
     return json({ error: err.message || "AI ovozini yaratib bo'lmadi", retryAfter: err.retryAfter ?? null, daily: Boolean(err.daily) }, status);
   }
+}
+
+// AI ovozlari keshi uchun chegara (R2 ulanmagan bo'lsa, audio D1 bazasida saqlanadi; bepul baza — 500 MB).
+// Chegaradan oshsa, eng eski audiolar o'chiriladi: ular kerak bo'lganda qayta yaratiladi.
+const TTS_BUDGET = (Number(process.env.TTS_CACHE_MB) || 150) * 1024 * 1024;
+const TTS_BYTES_KEY = "meta/tts-bytes";
+
+async function keepTtsBudget(added) {
+  const store = db();
+  if (!store.evictCache) return; // Netlify Blobs / R2: chegara shart emas
+  let cur = await store.get(TTS_BYTES_KEY);
+  if (!cur) cur = { bytes: (await getMany("ttsmeta/")).reduce((n, m) => n + (m.bytes || 0), 0) };
+  else cur.bytes += added;
+  if (cur.bytes > TTS_BUDGET) cur.bytes = Math.max(0, cur.bytes - (await store.evictCache(cur.bytes - TTS_BUDGET * 0.8)));
+  await store.set(TTS_BYTES_KEY, { bytes: cur.bytes, at: new Date().toISOString() });
+}
+
+/** O'qituvchi uchun: ma'lumotlar ombori qanchasi band va nima egallagan. */
+const STORAGE_GROUPS = [
+  ["AI ovozlari (audio)", ["ttsbin/", "ttsmeta/"]],
+  ["Yuklangan taqdimotlar", ["slidebin/", "slides/"]],
+  ["Yuklangan videolar", ["mediabin/", "videos/", "media/"]],
+  ["Talabalar ma'lumotlari (progress, baholar, ishlar)", null],
+];
+async function adminStorage(req) {
+  await requireTeacher(req);
+  const store = db();
+  if (!store.usage) return json({ supported: false });
+  const rows = await store.usage();
+  const groups = STORAGE_GROUPS.map(([name, prefixes]) => ({ name, bytes: 0, rows: 0, prefixes }));
+  for (const r of rows) {
+    const g = groups.find((x) => x.prefixes?.includes(r.p)) || groups[groups.length - 1];
+    g.bytes += r.bytes || 0;
+    g.rows += r.rows || 0;
+  }
+  const total = groups.reduce((n, g) => n + g.bytes, 0);
+  return json({ supported: true, total, limit: 500 * 1024 * 1024, ttsBudget: TTS_BUDGET, groups: groups.map(({ prefixes, ...g }) => g) });
 }
 
 async function ttsAudio(req, key, ext = "mp3") {
@@ -964,6 +1002,7 @@ async function clearTtsCache(req) {
     else for (const k of await store.list(prefix)) (await store.del(k), removed++);
   }
   await store.del("meta/tts-last-error").catch(() => {});
+  await store.set(TTS_BYTES_KEY, { bytes: 0, at: new Date().toISOString() }).catch(() => {});
   return json({ ok: true, removed });
 }
 
@@ -1723,6 +1762,7 @@ const routes = [
   ["GET", /^admin\/tts$/, adminTts],
   ["PUT", /^admin\/tts$/, setTtsSettings],
   ["DELETE", /^admin\/tts\/cache$/, clearTtsCache],
+  ["GET", /^admin\/storage$/, adminStorage],
   ["POST", /^topics\/([\w-]+)\/ask$/, topicAsk],
   ["GET", /^certificate$/, myCertificate],
   ["POST", /^certificate$/, issueCertificate],
@@ -1749,6 +1789,7 @@ export async function handle(req) {
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status);
     console.error(err);
+    if (err?.status === 507) return json({ error: err.message }, 507); // ombor to'lgan — tushunarli xabar
     return json({ error: describeError(err) }, 500);
   }
 }

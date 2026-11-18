@@ -1,7 +1,8 @@
 import { h, mount, toast, modal, fmtDate, progressBar, loading } from "../ui.js";
-import { api } from "../api.js";
+import { api, session } from "../api.js";
 import { TOPICS } from "../../data/topics.js";
 import { loadProgress, updatePlan, setNote, topicCompletion } from "../progress.js";
+import { downloadSelfStudyPdf } from "../selfstudy-pdf.js";
 
 const JOURNAL_KEY = "__journal";
 
@@ -40,7 +41,9 @@ export async function render(el) {
 
   mount(
     el,
-    h("div", { class: "page-head" }, h("div", {}, h("h1", {}, "Mustaqil ta'lim"), h("p", { class: "muted" }, "O'quv rejangizni tuzing, topshiriqlarni bajaring va o'z rivojlanishingizni kuzating."))),
+    h("div", { class: "page-head" },
+      h("div", {}, h("h1", {}, "Mustaqil ta'lim"), h("p", { class: "muted" }, "O'quv rejangizni tuzing, topshiriqlarni bajaring va o'z rivojlanishingizni kuzating.")),
+      pdfButton(() => session.user, () => submissions)),
     stats,
     recs.length > 0 && h("div", { class: "card accent" }, h("h3", {}, "🎯 Siz uchun tavsiyalar"), h("ul", {}, recs)),
     h("div", { class: "grid cols-2" }, planner(progress), journal(progress)),
@@ -50,6 +53,27 @@ export async function render(el) {
   const want = new URLSearchParams(location.hash.split("?")[1] || "").get("task");
   const task = allTasks.find((t) => t.id === want);
   if (task) openSubmit(task, subs[task.id], refresh);
+}
+
+/** "Mustaqil ishlarim (PDF)" tugmasi: titul varag'i, mundarija va har bir topshirilgan ish. */
+export function pdfButton(getStudent, getSubmissions, label = "📄 Mustaqil ishlarim (PDF)") {
+  const btn = h("button", { class: "btn", title: "Topshirilgan barcha mustaqil ishlarni PDF hujjat sifatida yuklab olish" }, label);
+  btn.onclick = async () => {
+    const subs = getSubmissions();
+    if (!subs.length) return toast("Hali birorta mustaqil ish topshirilmagan", "warn");
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = "⏳ PDF tayyorlanmoqda…";
+    try {
+      await downloadSelfStudyPdf(getStudent(), subs);
+      toast("PDF yuklab olindi", "ok");
+    } catch (e) {
+      toast(e.message, "error");
+    }
+    btn.disabled = false;
+    btn.textContent = old;
+  };
+  return btn;
 }
 
 function statCard(icon, value, label) {
