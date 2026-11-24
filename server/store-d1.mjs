@@ -77,6 +77,22 @@ export function d1Store(DB, FILES) {
       const { results: bin } = await DB.prepare("SELECT substr(key, 1, instr(key, '/')) AS p, COUNT(*) AS rows, SUM(length(data)) AS bytes FROM bin GROUP BY p").all();
       return [...kv.map((r) => ({ ...r, kind: "kv" })), ...bin.map((r) => ({ ...r, bytes: Math.round(r.bytes * 0.75), kind: "bin" }))];
     },
+    /** Zaxira nusxa uchun: kalit bo'yicha tartiblangan sahifa, qiymatlar xom (JSON matn) holida — protsessor tejaladi. */
+    async rawPage(after = "", limit = 400) {
+      await init();
+      const { results } = await DB.prepare("SELECT key, value FROM kv WHERE key > ? ORDER BY key LIMIT ?").bind(after, limit).all();
+      return results.map((r) => [r.key, r.value]);
+    },
+    /** Zaxiradan tiklash: overwrite=false — faqat bazada yo'q yozuvlar qo'shiladi. */
+    async putRaw(rows, overwrite) {
+      await init();
+      const now = Date.now();
+      const q = overwrite
+        ? "INSERT INTO kv (key, value, updated) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = ?2, updated = ?3"
+        : "INSERT INTO kv (key, value, updated) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO NOTHING";
+      const res = await roomy(() => DB.batch(rows.map(([k, v]) => DB.prepare(q).bind(k, v, now))));
+      return res.reduce((n, r) => n + (r.meta?.changes || 0), 0);
+    },
     async get(key) {
       await init();
       const row = await DB.prepare("SELECT value FROM kv WHERE key = ?").bind(key).first();
