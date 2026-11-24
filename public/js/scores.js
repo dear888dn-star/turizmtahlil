@@ -19,7 +19,11 @@ export function scoreTable(s) {
           const p = s.practice.topics[t.id];
           return h("tr", {},
             h("td", {}, `${t.num}. ${t.title}`),
-            h("td", {}, t.selfStudy.length ? t.selfStudy.map((task) => h("div", { class: "small" }, gradeChip(s.selfStudy.tasks[task.id]), " ", task.title)) : h("span", { class: "muted" }, "—")),
+            h("td", {}, t.selfStudy.length ? t.selfStudy.map((task) => {
+              const x = s.selfStudy.tasks[task.id];
+              const max = s.selfStudy.max?.[task.id];
+              return h("div", { class: "small" }, gradeChip(x), " ", task.title, max !== undefined ? h("span", { class: "muted" }, ` · ${num(x?.points ?? 0)} / ${num(max)} ball`) : null);
+            }) : h("span", { class: "muted" }, "—")),
             h("td", { class: "num" }, p ? [h("b", { class: p.score >= 8 ? "score-high" : p.score >= 6 ? "score-mid" : "score-low" }, num(p.score)), p.byTeacher ? h("div", { class: "muted small" }, "o'qituvchi bahosi") : h("div", { class: "muted small" }, "AI bahosi")] : h("span", { class: "muted" }, "—")));
         })))));
 }

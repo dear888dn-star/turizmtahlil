@@ -825,15 +825,36 @@ const SS_TASKS = TOPICS.flatMap((t) => t.selfStudy.map((s) => ({ id: s.id, topic
 const PRACTICE_TOPICS = TOPICS.filter((t) => t.practice).map((t) => t.id);
 const round1 = (x) => Math.round(x * 10) / 10;
 
-/** Bitta talabaning ballari. selfStudy — selfstudy/ yozuvlari, reviews — practicereview/ yozuvlari. */
-function scoreSheet(selfStudy, reviews) {
+// Mustaqil ishlar koeffitsientlari: o'qituvchi har ishga nisbiy koeffitsient beradi (masalan 1; 1,5; 0,5),
+// jami 20 ball shu koeffitsientlarga mutanosib bo'linadi: ish_maks = k / Σk × 20. Berilmagan ish — 1.
+const SS_WEIGHTS_KEY = "config/selfstudy-weights";
+const SS_TOTAL = 20;
+async function loadWeights() {
+  const saved = (await db().get(SS_WEIGHTS_KEY).catch(() => null)) || {};
+  const k = {};
+  for (const t of SS_TASKS) {
+    const v = Number(saved.weights?.[t.id]);
+    k[t.id] = Number.isFinite(v) && v >= 0 ? v : 1;
+  }
+  const sum = Object.values(k).reduce((a, b) => a + b, 0);
+  const max = {};
+  for (const t of SS_TASKS) max[t.id] = sum > 0 ? (k[t.id] / sum) * SS_TOTAL : 0;
+  return { coef: k, max, updatedAt: saved.updatedAt || null };
+}
+const round2 = (x) => Math.round(x * 100) / 100;
+
+/** Bitta talabaning ballari. selfStudy — selfstudy/ yozuvlari, reviews — practicereview/ yozuvlari, w — koeffitsientlar. */
+function scoreSheet(selfStudy, reviews, w) {
   const ss = {};
   for (const x of selfStudy) {
     const graded = Number.isFinite(x.grade) && !x.resubmitted;
-    ss[x.taskId] = { grade: graded ? x.grade : null, submitted: true, resubmitted: Boolean(x.resubmitted), at: x.submittedAt };
+    const max = w.max[x.taskId] ?? 0;
+    ss[x.taskId] = { grade: graded ? x.grade : null, submitted: true, resubmitted: Boolean(x.resubmitted), at: x.submittedAt, points: graded ? round2((x.grade / 5) * max) : null, max: round2(max) };
   }
   const graded = Object.values(ss).filter((x) => x.grade !== null);
   const ssSum = graded.reduce((n, x) => n + x.grade, 0);
+  // Har ish bali = baho / 5 × shu ishning maksimal bali (koeffitsient bo'yicha)
+  const ssPoints = Object.entries(ss).reduce((n, [id, x]) => n + (x.grade !== null ? (x.grade / 5) * (w.max[id] ?? 0) : 0), 0);
   // Amaliy: har mavzu bo'yicha eng yaxshi natija; o'qituvchi bahosi qo'yilgan bo'lsa, AI bahosi o'rniga o'sha olinadi
   const pr = {};
   for (const r of reviews) {
@@ -853,8 +874,9 @@ function scoreSheet(selfStudy, reviews) {
       total: SS_TASKS.length,
       avg: graded.length ? round1(ssSum / graded.length) : null,
       sum: ssSum,
-      // 20 ballik shkala: barcha topshiriqlar bo'yicha (topshirilmagan yoki baholanmagan — 0)
-      rating: SS_TASKS.length ? round1((ssSum / (5 * SS_TASKS.length)) * 20) : 0,
+      // 20 ballik shkala: koeffitsientlar bo'yicha (topshirilmagan yoki baholanmagan — 0)
+      rating: round1(ssPoints),
+      max: Object.fromEntries(SS_TASKS.map((t) => [t.id, round2(w.max[t.id])])),
     },
     practice: {
       topics: pr,
@@ -869,13 +891,13 @@ function scoreSheet(selfStudy, reviews) {
 
 async function myGradebook(req) {
   const user = await requireUser(req);
-  const [ss, reviews] = await Promise.all([getMany(`selfstudy/${user.id}/`), getMany(`practicereview/${user.id}/`)]);
-  return json(scoreSheet(ss, reviews));
+  const [ss, reviews, w] = await Promise.all([getMany(`selfstudy/${user.id}/`), getMany(`practicereview/${user.id}/`), loadWeights()]);
+  return json(scoreSheet(ss, reviews, w));
 }
 
 async function adminGradebook(req) {
   await requireTeacher(req);
-  const [users, ss, reviews] = await Promise.all([getMany("user/"), getEntries("selfstudy/"), getEntries("practicereview/")]);
+  const [users, ss, reviews, w] = await Promise.all([getMany("user/"), getEntries("selfstudy/"), getEntries("practicereview/"), loadWeights()]);
   const uidOf = (key) => key.split("/")[1];
   const group = (entries) => {
     const m = new Map();
@@ -886,8 +908,29 @@ async function adminGradebook(req) {
   const prBy = group(reviews);
   const students = users
     .filter((u) => u.role === "student")
-    .map((u) => ({ user: { id: u.id, name: u.name, group: u.group || "", college: u.college || "" }, ...scoreSheet(ssBy.get(u.id) || [], prBy.get(u.id) || []) }));
-  return json({ students, selfStudyTasks: SS_TASKS.length, practiceTopics: PRACTICE_TOPICS.length });
+    .map((u) => ({ user: { id: u.id, name: u.name, group: u.group || "", college: u.college || "" }, ...scoreSheet(ssBy.get(u.id) || [], prBy.get(u.id) || [], w) }));
+  return json({ students, selfStudyTasks: SS_TASKS.length, practiceTopics: PRACTICE_TOPICS.length, weights: w });
+}
+
+async function getWeights(req) {
+  await requireTeacher(req);
+  return json(await loadWeights());
+}
+
+async function saveWeights(req) {
+  await requireTeacher(req);
+  const b = await body(req);
+  const weights = {};
+  for (const t of SS_TASKS) {
+    const v = Number(b.weights?.[t.id]);
+    if (b.weights?.[t.id] === undefined) continue;
+    if (!Number.isFinite(v) || v < 0 || v > 100) throw new HttpError(400, "Koeffitsient 0 dan 100 gacha son bo'lishi kerak");
+    weights[t.id] = Math.round(v * 1000) / 1000;
+  }
+  const sum = SS_TASKS.reduce((n, t) => n + (weights[t.id] ?? 1), 0);
+  if (!(sum > 0)) throw new HttpError(400, "Kamida bitta ishning koeffitsienti 0 dan katta bo'lishi kerak");
+  await db().set(SS_WEIGHTS_KEY, { weights, updatedAt: new Date().toISOString() });
+  return json(await loadWeights());
 }
 
 // ---------- Talaba faoliyati dalillari (XP, reyting, sertifikat) ----------
@@ -1552,7 +1595,7 @@ function describeError(err) {
 
 // Platforma versiyasi — /api/health da ko'rinadi: saytga qaysi versiya chiqqanini tekshirish uchun.
 // Har bir muhim yangilanishda sanani va qisqa nomni yangilang.
-export const APP_VERSION = "2026-11-24 · zaxira nusxa, Live savollar banki, variantlar, baholar jurnali, PDF";
+export const APP_VERSION = "2026-11-24b · mustaqil ish koeffitsientlari, zaxira nusxa, Live savollar banki, variantlar, baholar jurnali, PDF";
 
 async function health() {
   const checks = { version: APP_VERSION, blobs: "tekshirilmoqda", jwtSecret: process.env.JWT_SECRET ? "o'rnatilgan" : "avtomatik (omborda)", teacherCode: process.env.TEACHER_CODE ? "o'rnatilgan" : "o'rnatilmagan", ai: provider() ? `${provider()} (${modelName()})` : "demo-rejim", node: process.version, platform: process.env.CF_PAGES ? "Cloudflare" : "Netlify / Node" };
@@ -1893,6 +1936,8 @@ const routes = [
   ["GET", /^admin\/practice-reviews$/, adminPracticeReviews],
   ["GET", /^gradebook$/, myGradebook],
   ["GET", /^admin\/gradebook$/, adminGradebook],
+  ["GET", /^admin\/selfstudy-weights$/, getWeights],
+  ["PUT", /^admin\/selfstudy-weights$/, saveWeights],
   ["PUT", /^admin\/practice-reviews\/([\w-]+)\/([\w-]+)\/([\w-]+)$/, teacherPracticeComment],
   ["GET", /^labs$/, myLabs],
   ["PUT", /^labs\/([\w-]+)$/, saveLab],

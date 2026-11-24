@@ -1004,9 +1004,11 @@ async function gradebook(el) {
   const csv = () =>
     downloadFile("baholar-jurnali.csv", toCSV([
       ["№", "F.I.Sh.", "Guruh", "Mustaqil ish: topshirgan", "baholangan", "o'rtacha baho (2–5)", "ball (20)", "Amaliy: bajarilgan mavzu", "o'rtacha (/10)", "ball (20)", "Jami (40)",
-        ...TOPICS.filter((t) => t.practice).map((t) => `Amaliy ${t.num}-mavzu (/10)`)],
+        ...TOPICS.filter((t) => t.practice).map((t) => `Amaliy ${t.num}-mavzu (/10)`),
+        ...SS_LIST.map((x) => `MI ${x.num}-mavzu: ${x.title} (/${num(d.weights?.max?.[x.id] !== undefined ? Math.round(d.weights.max[x.id] * 100) / 100 : "")})`)],
       ...rowsOf().map((s, i) => [i + 1, s.user.name, s.user.group, s.selfStudy.submitted, s.selfStudy.graded, num(s.selfStudy.avg), num(s.selfStudy.rating), s.practice.done, num(s.practice.avg), num(s.practice.rating), num(Math.round((s.selfStudy.rating + s.practice.rating) * 10) / 10),
-        ...TOPICS.filter((t) => t.practice).map((t) => num(s.practice.topics[t.id]?.score))]),
+        ...TOPICS.filter((t) => t.practice).map((t) => num(s.practice.topics[t.id]?.score)),
+        ...SS_LIST.map((x) => num(s.selfStudy.tasks[x.id]?.points ?? 0))]),
     ]));
   draw();
   mount(
@@ -1016,6 +1018,7 @@ async function gradebook(el) {
       h("label", { class: "field grow" }, h("span", {}, "Qidirish"), h("input", { type: "search", placeholder: "Talaba ismi…", oninput: (e) => ((f.q = e.target.value), draw()) })),
       h("label", { class: "field" }, h("span", {}, "Tartib"), h("select", { onchange: (e) => ((f.sort = e.target.value), draw()) },
         [["name", "Guruh va ism"], ["total", "Jami ball"], ["ss", "Mustaqil ish bali"], ["pr", "Amaliy bali"]].map(([v, t]) => h("option", { value: v }, t)))),
+      h("button", { class: "btn ghost", onclick: () => weightsEditor(d, () => gradebook(el)) }, "⚖️ Koeffitsientlar"),
       h("button", { class: "btn ghost", onclick: csv }, "⬇ Excel (CSV)")),
     summary,
     h("div", { class: "table-wrap card" },
@@ -1025,8 +1028,55 @@ async function gradebook(el) {
           h("tr", {}, h("th", {}, "Topshirgan / baholangan"), h("th", {}, "O'rtacha baho"), h("th", {}, "Ball (20)"), h("th", {}, "Bajarilgan mavzu"), h("th", {}, "O'rtacha (/10)"), h("th", {}, "Ball (20)"))),
         body)),
     h("p", { class: "muted small" },
-      `Hisoblash: mustaqil ish bali = baholar yig'indisi ÷ (5 × ${d.selfStudyTasks} ta topshiriq) × 20; amaliy bali = har mavzudagi eng yaxshi natija (o'qituvchi bahosi bo'lsa — o'sha) yig'indisi ÷ (10 × ${d.practiceTopics} ta mavzu) × 20. Topshirilmagan yoki baholanmagan ish 0 deb olinadi. Batafsil ko'rish uchun talaba qatorini bosing.`)
+      `Hisoblash: mustaqil ish bali — jami 20 ball ${d.selfStudyTasks} ta ishga koeffitsientlar bo'yicha bo'linadi (ish maks. bali = k ÷ Σk × 20), har ish bali = baho ÷ 5 × maks. bali («⚖️ Koeffitsientlar» tugmasi); amaliy bali = har mavzudagi eng yaxshi natija (o'qituvchi bahosi bo'lsa — o'sha) yig'indisi ÷ (10 × ${d.practiceTopics} ta mavzu) × 20. Topshirilmagan yoki baholanmagan ish 0 deb olinadi. Batafsil ko'rish uchun talaba qatorini bosing.`)
   );
+}
+
+const SS_LIST = TOPICS.flatMap((t) => t.selfStudy.map((x) => ({ id: x.id, title: x.title, num: t.num })));
+
+/** Mustaqil ishlar koeffitsientlari: jami 20 ball ishlarga koeffitsientga mutanosib bo'linadi. */
+function weightsEditor(d, onSaved) {
+  const coef = { ...(d.weights?.coef || {}) };
+  for (const x of SS_LIST) if (!Number.isFinite(coef[x.id])) coef[x.id] = 1;
+  const inputs = {};
+  const maxCells = {};
+  const sumEl = h("b");
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const recalc = () => {
+    const sum = SS_LIST.reduce((n, x) => n + (coef[x.id] || 0), 0);
+    for (const x of SS_LIST) maxCells[x.id].textContent = sum > 0 ? num(r2(((coef[x.id] || 0) / sum) * 20)) : "—";
+    sumEl.textContent = `Σk = ${num(r2(sum))} · jami ${sum > 0 ? 20 : 0} ball`;
+  };
+  const setAll = (v) => {
+    for (const x of SS_LIST) ((coef[x.id] = v), (inputs[x.id].value = String(v)));
+    recalc();
+  };
+  const rows = SS_LIST.map((x) => {
+    inputs[x.id] = h("input", { type: "number", min: "0", max: "100", step: "0.1", value: String(coef[x.id]), style: "width:5.5em", oninput: (e) => ((coef[x.id] = Math.max(0, Number(String(e.target.value).replace(",", ".")) || 0)), recalc()) });
+    maxCells[x.id] = h("td", { class: "num" });
+    return h("tr", {}, h("td", { class: "num muted" }, x.num), h("td", {}, x.title), h("td", { class: "num" }, inputs[x.id]), maxCells[x.id]);
+  });
+  let close;
+  const save = async (btn) => {
+    btn.disabled = true;
+    try {
+      await api.put("admin/selfstudy-weights", { weights: coef });
+      toast("Koeffitsientlar saqlandi — ballar qayta hisoblandi", "success");
+      close();
+      onSaved();
+    } catch (e) {
+      toast(e.message, "error");
+      btn.disabled = false;
+    }
+  };
+  close = modal("⚖️ Mustaqil ishlar koeffitsientlari", h("div", { class: "stack" },
+    h("p", { class: "muted small" }, "Har bir mustaqil ishga nisbiy koeffitsient bering (masalan, oddiy ish — 1, murakkab ish — 2, kichik ish — 0,5). Jami 20 ball shu koeffitsientlarga mutanosib bo'linadi: ishning maksimal bali = k ÷ Σk × 20. Talaba bali = baho ÷ 5 × maksimal ball. Koeffitsient 0 bo'lsa, ish hisobga olinmaydi."),
+    h("div", { class: "row wrap" }, sumEl, h("button", { class: "btn ghost", onclick: () => setAll(1) }, "Teng taqsimlash (hammasi 1)")),
+    h("div", { class: "table-wrap" }, h("table", { class: "table" },
+      h("thead", {}, h("tr", {}, h("th", {}, "Mavzu"), h("th", {}, "Mustaqil ish"), h("th", {}, "Koeffitsient (k)"), h("th", {}, "Maks. ball"))),
+      h("tbody", {}, rows))),
+    h("div", { class: "row" }, h("button", { class: "btn", onclick: (e) => save(e.currentTarget) }, "💾 Saqlash"))), { wide: true });
+  recalc();
 }
 
 /** Bitta talabaning mavzular bo'yicha ballari (o'qituvchi uchun modal oyna). */
