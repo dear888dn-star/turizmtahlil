@@ -1078,6 +1078,79 @@ async function clearTtsCache(req) {
   return json({ ok: true, removed });
 }
 
+// ---------- Zaxira nusxa (backup) va tiklash ----------
+// Talabalar ma'lumotlari (profillar, progress, mustaqil ishlar, AI tekshiruvlari, laboratoriya, sertifikatlar va h.k.)
+// o'qituvchi kompyuteriga JSON fayl sifatida saqlanadi va istalgan paytda shu fayldan tiklanadi.
+// Qayta yaratiladigan yoki vaqtinchalik ma'lumotlar (AI ovozlari, Live o'yinlar, kunlik limitlar) zaxiraga kirmaydi.
+const BACKUP_SKIP = ["ttsmeta/", "ttsbin/", "ttsq/", "live/", "liveans/", "liveplayer/", "practicequota/", "slidebin/", "mediabin/", "meta/health", "meta/tts-", "meta/last-backup"];
+const backupSkip = (key) => BACKUP_SKIP.some((p) => key.startsWith(p));
+const BACKUP_PAGE = 400;
+
+async function adminBackup(req) {
+  await requireTeacher(req);
+  const url = new URL(req.url);
+  const after = url.searchParams.get("after") || "";
+  const store = db();
+  let page;
+  if (store.rawPage) page = await store.rawPage(after, BACKUP_PAGE);
+  else {
+    // Netlify Blobs / lokal fayl ombori: hammasini o'qib, sahifalarga bo'lamiz
+    const all = (await getEntries("")).sort((a, b) => (a[0] < b[0] ? -1 : 1)).filter(([k]) => k > after);
+    page = all.slice(0, BACKUP_PAGE).map(([k, v]) => [k, JSON.stringify(v)]);
+  }
+  const next = page.length === BACKUP_PAGE ? page[page.length - 1][0] : null;
+  return json({ rows: page.filter(([k]) => !backupSkip(k)), next });
+}
+
+async function adminBackupDone(req) {
+  const teacher = await requireTeacher(req);
+  const b = await body(req);
+  const info = { at: new Date().toISOString(), by: teacher.name, entries: Number(b.entries) || 0, bytes: Number(b.bytes) || 0 };
+  await db().set("meta/last-backup", info);
+  return json(info);
+}
+
+async function adminBackupInfo(req) {
+  await requireTeacher(req);
+  return json({ last: await db().get("meta/last-backup") });
+}
+
+async function adminRestore(req) {
+  await requireTeacher(req);
+  const b = await body(req);
+  const overwrite = b.mode === "overwrite";
+  if (!Array.isArray(b.rows) || !b.rows.length) throw new HttpError(400, "Tiklash uchun yozuvlar yo'q");
+  if (b.rows.length > 300) throw new HttpError(413, "Bir so'rovda ko'pi bilan 300 ta yozuv");
+  const rows = [];
+  let skipped = 0;
+  for (const r of b.rows) {
+    const [key, value] = Array.isArray(r) ? r : [];
+    if (typeof key !== "string" || !key || key.length > 300 || !/^[\w.@:+%-]+\//.test(key) || backupSkip(key) || typeof value !== "string" || value.length > 1_000_000) {
+      skipped++;
+      continue;
+    }
+    try {
+      JSON.parse(value);
+    } catch {
+      skipped++;
+      continue;
+    }
+    rows.push([key, value]);
+  }
+  let written = 0;
+  if (rows.length) {
+    const store = db();
+    if (store.putRaw) written = await store.putRaw(rows, overwrite);
+    else
+      for (const [k, v] of rows) {
+        if (!overwrite && (await store.get(k)) !== null) continue;
+        await store.set(k, JSON.parse(v));
+        written++;
+      }
+  }
+  return json({ written, skipped, unchanged: rows.length - written });
+}
+
 // ---------- Test tahlili (item-analiz) ----------
 
 async function adminItems(req) {
@@ -1840,6 +1913,10 @@ const routes = [
   ["PUT", /^admin\/tts$/, setTtsSettings],
   ["DELETE", /^admin\/tts\/cache$/, clearTtsCache],
   ["GET", /^admin\/storage$/, adminStorage],
+  ["GET", /^admin\/backup$/, adminBackup],
+  ["GET", /^admin\/backup\/info$/, adminBackupInfo],
+  ["POST", /^admin\/backup\/done$/, adminBackupDone],
+  ["POST", /^admin\/restore$/, adminRestore],
   ["POST", /^topics\/([\w-]+)\/ask$/, topicAsk],
   ["GET", /^certificate$/, myCertificate],
   ["POST", /^certificate$/, issueCertificate],

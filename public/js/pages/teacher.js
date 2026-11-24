@@ -36,6 +36,7 @@ const SECTIONS = [
   { key: "items", icon: "📉", title: "Test tahlili", group: "analysis", desc: "Savollar qiyinligi, ajrata olish indeksi, distraktorlar va KR-20 ishonchliligi." },
   { key: "slides", icon: "🖥️", title: "Taqdimotlar", group: "content", desc: "18 ta dars taqdimoti o'rnatilgan; kerak bo'lsa mavzuga boshqa PDF, PowerPoint yoki havola joylang." },
   { key: "videos", icon: "📹", title: "Video darslar", group: "content", desc: "YouTube/Vimeo havolasi yoki video fayl yuklash." },
+  { key: "backup", icon: "💾", title: "Zaxira nusxa", group: "content", desc: "Talabalar ishlari va baholarini kompyuterga saqlash va kerak bo'lsa fayldan tiklash." },
   { key: "voices", icon: "🔊", title: "AI ovozlar", group: "content", desc: "Platforma ovozini tanlash va ovozlarni oldindan tayyorlash." },
   { key: "live", icon: "🎮", title: "Jonli viktorina va so'z buluti", group: "live", desc: "Live: PIN/QR orqali sinf musobaqasi yoki jonli aqliy hujum." },
 ];
@@ -56,7 +57,7 @@ const sectionHref = (key) => `#/teacher/${key}`;
 
 export async function render(el, tab = "", param) {
   const content = h("div");
-  const views = { "": overview, practice: practiceReviews, labs: labProjects, slides: slidesManager, videos: videosManager, live: (el) => mount(el, createForm()), items: itemsView, voices: voicesManager, students, trainer, "self-study": selfStudy, gradebook };
+  const views = { "": overview, practice: practiceReviews, labs: labProjects, slides: slidesManager, videos: videosManager, live: (el) => mount(el, createForm()), items: itemsView, voices: voicesManager, students, trainer, "self-study": selfStudy, gradebook, backup: backupView };
   const view = views[tab || ""];
   if (!view) throw new Error("Bo'lim topilmadi");
   const sec = SECTIONS.find((x) => x.key === tab);
@@ -129,6 +130,17 @@ function gallery(o) {
 
 // ---------------- Umumiy ----------------
 
+/** Zaxira nusxa eslatmasi: 7 kundan ko'p vaqt o'tgan bo'lsa yoki hech qachon olinmagan bo'lsa. */
+function backupReminder() {
+  const box = h("div");
+  api.get("admin/backup/info").then(({ last }) => {
+    const days = last ? Math.floor((Date.now() - Date.parse(last.at)) / 86400000) : null;
+    if (last && days <= 7) return;
+    box.replaceChildren(h("div", { class: "alert alert-warn row between wrap" }, h("span", {}, last ? `💾 Oxirgi zaxira nusxa ${days} kun oldin olingan.` : "💾 Talabalar ishlari va baholarining zaxira nusxasi hali olinmagan."), h("a", { class: "btn small", href: "#/teacher/backup" }, "Zaxira nusxa olish")));
+  }).catch(() => {});
+  return box;
+}
+
 async function overview(el) {
   const o = await api.get("admin/overview");
   const card = (icon, value, label, href) => h(href ? "a" : "div", { class: "card stat-card", href }, h("div", { class: "stat-icon" }, icon), h("b", {}, value), h("span", { class: "muted small" }, label));
@@ -138,6 +150,7 @@ async function overview(el) {
     h("h2", { class: "tp-group-title", style: { "--hue": 220 } }, "📊 Umumiy ko'rsatkichlar"),
     !o.aiEnabled && h("div", { class: "alert alert-warn" }, "⚠️ AI kaliti ulanmagan: amaliy mashg'ulotlar va laboratoriya avtomatik qoidalar asosida taxminiy baholanadi, trenajyor demo-rejimda. Netlify sozlamalarida GEMINI_API_KEY (bepul) yoki ANTHROPIC_API_KEY o'zgaruvchisini qo'shing."),
     o.aiEnabled && h("p", { class: "muted small" }, `🤖 AI: ${o.aiProvider} · ${o.aiModel}`),
+    backupReminder(),
     h(
       "div",
       { class: "grid cols-4" },
@@ -801,6 +814,152 @@ async function trainer(el) {
     out
   );
   draw();
+}
+
+// ---------------- Zaxira nusxa (backup) va tiklash ----------------
+
+const BACKUP_FORMAT = "turtahlil-backup";
+// Fayl ichidagi yozuvlarni tushunarli guruhlarga ajratish (xulosa uchun)
+const BACKUP_GROUPS = [
+  ["user/", "👤 Foydalanuvchi profillari"],
+  ["progress/", "📈 Mavzular bo'yicha progress"],
+  ["selfstudy/", "🧩 Mustaqil ishlar va baholar"],
+  ["practicereview/", "🤖 Amaliy mashg'ulot tekshiruvlari"],
+  ["lab/", "🔬 Laboratoriya hisobotlari"],
+  ["trainer/", "🎙 Trenajyor natijalari"],
+  ["cert", "🎓 Sertifikatlar"],
+];
+const groupOf = (key) => BACKUP_GROUPS.find(([p]) => key.startsWith(p))?.[1] || "⚙️ Boshqa (sozlamalar, havolalar)";
+const countGroups = (entries) => {
+  const m = {};
+  for (const [k] of entries) m[groupOf(k)] = (m[groupOf(k)] || 0) + 1;
+  return m;
+};
+// Yuklangan taqdimot/video fayllarining o'zi zaxiraga kirmaydi — ularga havola qiluvchi yozuvlar ham o'tkazib yuboriladi
+const fileRecord = (key, value) => /^(slides|video)\//.test(key) && value && typeof value === "object" && !["link", "youtube"].includes(value.kind);
+
+async function backupView(el) {
+  const info = await api.get("admin/backup/info").catch(() => ({}));
+  const bar = h("div", { class: "progress" }, h("div", { class: "progress-fill", style: { width: "0%" } }));
+  const status = h("p", { class: "muted small" });
+  const setP = (pct, text) => {
+    bar.firstChild.style.width = `${Math.min(100, pct)}%`;
+    status.textContent = text;
+  };
+
+  // ---- Yuklab olish ----
+  const dlBtn = h("button", { class: "btn lg" }, "⬇ Zaxira nusxani kompyuterga yuklab olish");
+  dlBtn.onclick = async () => {
+    dlBtn.disabled = true;
+    try {
+      const entries = [];
+      let after = "";
+      let page = 0;
+      do {
+        const d = await api.get(`admin/backup?after=${encodeURIComponent(after)}`);
+        for (const [k, raw] of d.rows) {
+          const v = JSON.parse(raw);
+          if (!fileRecord(k, v)) entries.push([k, v]);
+        }
+        after = d.next;
+        page++;
+        setP(Math.min(95, page * 8), `Yuklanmoqda… ${entries.length} ta yozuv`);
+      } while (after);
+      const file = JSON.stringify({ format: BACKUP_FORMAT, version: 1, createdAt: new Date().toISOString(), site: location.host, counts: countGroups(entries), entries });
+      const day = new Date().toISOString().slice(0, 10);
+      downloadFile(`turtahlil-zaxira-${day}.json`, file, "application/json");
+      await api.post("admin/backup/done", { entries: entries.length, bytes: file.length }).catch(() => {});
+      setP(100, `✅ Tayyor: ${entries.length} ta yozuv, ${(file.length / 1024 / 1024).toFixed(2).replace(".", ",")} MB. Fayl “Yuklab olingan fayllar” (Downloads) papkasiga saqlandi.`);
+      toast("Zaxira nusxa saqlandi", "ok");
+    } catch (e) {
+      setP(0, "");
+      toast(e.message, "error");
+    }
+    dlBtn.disabled = false;
+  };
+
+  // ---- Fayldan tiklash ----
+  const restoreBox = h("div", { class: "stack" });
+  const fileInput = h("input", { type: "file", accept: ".json,application/json" });
+  fileInput.onchange = async () => {
+    const f = fileInput.files?.[0];
+    if (!f) return;
+    let data;
+    try {
+      data = JSON.parse(await f.text());
+      if (data.format !== BACKUP_FORMAT || !Array.isArray(data.entries)) throw new Error();
+    } catch {
+      restoreBox.replaceChildren(h("div", { class: "alert alert-error" }, "Bu fayl platformaning zaxira nusxasi emas yoki shikastlangan."));
+      return;
+    }
+    const counts = countGroups(data.entries);
+    const mode = { value: "missing" };
+    const radio = (val, title, text) => h("label", { class: "check-row" }, h("input", { type: "radio", name: "rmode", value: val, checked: val === "missing", onchange: () => (mode.value = val) }), h("span", {}, h("b", {}, title), h("br"), h("small", { class: "muted" }, text)));
+    const go = h("button", { class: "btn" }, "♻️ Tiklashni boshlash");
+    go.onclick = async () => {
+      if (!(await confirmDialog(mode.value === "overwrite" ? "Bazadagi yozuvlar zaxiradagi holatga qaytariladi: zaxiradan keyin kiritilgan o'zgarishlar (baholar, progress) yo'qolishi mumkin. Davom etasizmi?" : `${data.entries.length} ta yozuvdan bazada yo'qlari tiklanadi. Davom etasizmi?`))) return;
+      go.disabled = true;
+      fileInput.disabled = true;
+      let written = 0;
+      let skipped = 0;
+      // Kichik bo'laklarda yuboriladi (server protsessor chegarasi uchun)
+      const rows = data.entries.map(([k, v]) => [k, JSON.stringify(v)]);
+      let i = 0;
+      try {
+        while (i < rows.length) {
+          const batch = [];
+          let size = 0;
+          while (i < rows.length && batch.length < 200 && size + rows[i][1].length < 400_000) {
+            size += rows[i][1].length;
+            batch.push(rows[i++]);
+          }
+          if (!batch.length) batch.push(rows[i++]);
+          const r = await api.post("admin/restore", { rows: batch, mode: mode.value });
+          written += r.written;
+          skipped += r.skipped;
+          setP((i / rows.length) * 100, `Tiklanmoqda… ${i} / ${rows.length}`);
+        }
+        setP(100, `✅ Tiklash tugadi: ${written} ta yozuv tiklandi/yangilandi, ${rows.length - written - skipped} tasi bazada allaqachon bor edi${skipped ? `, ${skipped} tasi o'tkazib yuborildi` : ""}.`);
+        toast("Ma'lumotlar tiklandi", "ok");
+      } catch (e) {
+        setP((i / rows.length) * 100, `⚠️ ${i} / ${rows.length} yozuvdan keyin to'xtadi: ${e.message}. Qayta urinib ko'ring — allaqachon tiklanganlari takrorlanmaydi.`);
+        toast(e.message, "error");
+      }
+      go.disabled = false;
+      fileInput.disabled = false;
+    };
+    restoreBox.replaceChildren(
+      h("div", { class: "card" },
+        h("b", {}, `📄 ${f.name}`),
+        h("p", { class: "muted small" }, `Zaxira sanasi: ${fmtDate(data.createdAt)} · sayt: ${data.site || "—"} · jami ${data.entries.length} ta yozuv`),
+        h("ul", { class: "small" }, Object.entries(counts).map(([g, n]) => h("li", {}, `${g}: ${n}`)))),
+      radio("missing", "Faqat yo'qolgan yozuvlarni tiklash (tavsiya)", "O'chib ketgan talabalar, ishlar va baholar qaytariladi; bazadagi mavjud ma'lumotlarga tegilmaydi."),
+      radio("overwrite", "Hammasini zaxiradagi holatga qaytarish", "Mavjud yozuvlar ham zaxiradagi versiya bilan almashtiriladi. Zaxiradan keyingi o'zgarishlar yo'qolishi mumkin."),
+      go
+    );
+  };
+
+  const last = info.last;
+  const days = last ? Math.floor((Date.now() - Date.parse(last.at)) / 86400000) : null;
+  mount(
+    el,
+    h("div", { class: `alert ${!last || days > 7 ? "alert-warn" : "alert-info"}` },
+      last ? `Oxirgi zaxira nusxa: ${fmtDate(last.at)} (${days === 0 ? "bugun" : `${days} kun oldin`}) · ${last.entries} ta yozuv · ${last.by}` : "Hali birorta ham zaxira nusxa olinmagan.",
+      (!last || days > 7) && h("div", { class: "small" }, "Haftada kamida bir marta (ayniqsa baholashdan keyin) zaxira nusxa olib qo'yish tavsiya etiladi.")),
+    h("div", { class: "card stack" },
+      h("h3", {}, "⬇ Zaxira nusxa olish"),
+      h("p", { class: "small" }, "Barcha talabalar profillari, mavzular bo'yicha progress, mustaqil ishlar va baholar, amaliy mashg'ulot (AI) tekshiruvlari, laboratoriya hisobotlari va sertifikatlar bitta .json faylga yig'ilib, kompyuteringizga saqlanadi."),
+      h("p", { class: "muted small" }, "Zaxiraga kirmaydi: AI ovozlari (qayta yaratiladi), Live o'yinlar, yuklangan taqdimot va video fayllarining o'zi (ularni alohida saqlang)."),
+      h("div", { class: "alert alert-warn small" }, "🔒 Faylda talabalarning shaxsiy ma'lumotlari va shifrlangan parollari bor. Uni faqat o'zingizda saqlang, hech kimga yubormang."),
+      dlBtn),
+    h("div", { class: "card stack" },
+      h("h3", {}, "♻️ Fayldan tiklash"),
+      h("p", { class: "small" }, "Ma'lumotlar o'chib ketsa yoki platforma yangi joyga ko'chirilsa, avval saqlangan zaxira faylini tanlang."),
+      fileInput,
+      restoreBox),
+    bar,
+    status
+  );
 }
 
 // ---------------- Baholar jurnali ----------------
