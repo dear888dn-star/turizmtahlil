@@ -17,5 +17,7 @@
   },
   "d1_databases": [{ "binding": "DB", "database_name": "turtahlil-db" }],
   "keep_vars": true,
+  // Tarmoq (branch) yig'ishlari "npx wrangler preview" ishlatadi — unga shu blok kerak
+  "previews": {},
   "observability": { "enabled": true }
 }
