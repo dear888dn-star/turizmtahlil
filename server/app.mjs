@@ -1550,8 +1550,12 @@ function describeError(err) {
   return `Serverda kutilmagan xatolik yuz berdi (${name || "Error"}: ${msg.slice(0, 160)})`;
 }
 
+// Platforma versiyasi — /api/health da ko'rinadi: saytga qaysi versiya chiqqanini tekshirish uchun.
+// Har bir muhim yangilanishda sanani va qisqa nomni yangilang.
+export const APP_VERSION = "2026-11-24 · zaxira nusxa, Live savollar banki, variantlar, baholar jurnali, PDF";
+
 async function health() {
-  const checks = { blobs: "tekshirilmoqda", jwtSecret: process.env.JWT_SECRET ? "o'rnatilgan" : "avtomatik (omborda)", teacherCode: process.env.TEACHER_CODE ? "o'rnatilgan" : "o'rnatilmagan", ai: provider() ? `${provider()} (${modelName()})` : "demo-rejim", node: process.version, platform: process.env.CF_PAGES ? "Cloudflare" : "Netlify / Node" };
+  const checks = { version: APP_VERSION, blobs: "tekshirilmoqda", jwtSecret: process.env.JWT_SECRET ? "o'rnatilgan" : "avtomatik (omborda)", teacherCode: process.env.TEACHER_CODE ? "o'rnatilgan" : "o'rnatilmagan", ai: provider() ? `${provider()} (${modelName()})` : "demo-rejim", node: process.version, platform: process.env.CF_PAGES ? "Cloudflare" : "Netlify / Node" };
   checks.tts = ttsEnabled() ? `gemini (${(await ttsModels().catch(() => []))[0] || "model topilmadi"})` : "o'chiq (brauzer ovozi)";
   try {
     await db().set("meta/health", { at: new Date().toISOString() });
